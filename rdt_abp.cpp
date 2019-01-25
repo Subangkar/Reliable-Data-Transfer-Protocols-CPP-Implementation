@@ -48,12 +48,12 @@ void stoptimer(int AorB);
 void tolayer3(int AorB, struct pkt packet);
 void tolayer5(int AorB, char datasent[20]);
 
-void printLog(int AorB, char *msg, struct pkt *p, struct msg *m);
+void printLog(int AorB, char *msg,const struct pkt *p, struct msg *m);
 void printStat();
 
 int calc_checksum(const pkt* p);
 
-pkt make_pkt(msg message, int seqNum, int ackNum = ACK_DEFAULT);
+pkt make_pkt(msg message, int seqNum, int ackNum = ACK_ABP_DEFAULT);
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 #define A 0
@@ -82,7 +82,7 @@ void A_output(struct msg message)
 
     rtp_layer.senderState = WAITING_FOR_ACK;/* set current pkt to not finished */
 
-	cur_pkt = make_pkt(message, rtp_layer.seqnum, ACK_DEFAULT);/* sending packets do not need to set acknum */
+    cur_pkt = make_pkt(message, rtp_layer.seqnum, ACK_ABP_DEFAULT);/* sending packets do not need to set acknum */
 
 	tolayer3(A, cur_pkt);
 	++rtp_layer.cnt_layer3;
@@ -157,6 +157,7 @@ void B_input(struct pkt packet)
 
     printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
     ++rtp_layer.cnt_layer3;
+    pkt ack = make_pkt(packet.payload,SEQ_ABP_DEFAULT,rtp_layer.seqnum);// send packet seq no as it is received
 
 	/* normal packet, deliver data to layer5 */
 	if (packet.seqnum == rtp_layer.seqnum && packet.checksum == calc_checksum(&packet)) {
@@ -167,19 +168,18 @@ void B_input(struct pkt packet)
 	}
 
 	/* check checksum, if corrupted*/
-    if(packet.checksum != calc_checksum(&packet))
+    else if(packet.checksum != calc_checksum(&packet))
     {
         printLog(B, const_cast<char *>("Data Packet is corrupted"), &packet, NULL);
     }
 
     /* duplicate pkt resends the ACK*/
-    if(packet.seqnum != rtp_layer.seqnum)
+    else if(packet.seqnum != rtp_layer.seqnum)
     {
         printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
     }
-
-    tolayer3(B, make_pkt(packet.payload,packet.seqnum,packet.seqnum));
-    printLog(B, const_cast<char *>("Send ACK packet to layer3"), &packet, NULL);
+    tolayer3(B, ack); // seqnum doesn't have any meaning here
+    printLog(B, const_cast<char *>("Send ACK packet to layer3"), &ack, NULL);
 }
 
 /* called when B's timer goes off */
@@ -615,8 +615,10 @@ void tolayer5(int AorB, char datasent[20])
 
 
 /******************* DEBUG ***********************/
-void printLog(int AorB, char *msg, struct pkt *p, struct msg *m)
+void printLog(int AorB, char *msg,const struct pkt *p, struct msg *m)
 {
+    static bool opened = false;
+    if (!opened) opened = true,fclose(fopen("out.log", "w"));
 //    freopen("out.log","a",stdout);
     FILE* fp = fopen("out.log","a");
     char ch = (AorB == A)?'A':'B';
@@ -660,5 +662,5 @@ void printStat() {
     printf("#Sent Packets from Layer5-to   A: %d\n",A_rtp.cnt_layer5);
     printf("#Sent Packets to   Layer3-from A: %d\n",A_rtp.cnt_layer3);
     printf("#Sent Packets from Layer3-to   B: %d\n",B_rtp.cnt_layer3);
-    printf("#Sent Packets to   Layer5-from B: %d\n",A_rtp.cnt_layer5);
+    printf("#Sent Packets to   Layer5-from B: %d\n",B_rtp.cnt_layer5);
 }

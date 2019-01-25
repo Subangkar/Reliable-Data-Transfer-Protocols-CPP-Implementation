@@ -23,7 +23,8 @@
 struct msg;
 struct pkt;
 
-#define ACK_DEFAULT 0xFFFF
+#define ACK_ABP_DEFAULT 0x0F
+#define SEQ_ABP_DEFAULT 0x0F
 
 enum sender_state {WAITING_FOR_PKT,WAITING_FOR_ACK};
 
