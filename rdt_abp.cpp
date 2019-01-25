@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cstdio>
 
 #include "Utils.h"
 
@@ -48,7 +49,10 @@ void tolayer3(int AorB, struct pkt packet);
 void tolayer5(int AorB, char datasent[20]);
 
 void printLog(int AorB, char *msg, struct pkt *p, struct msg *m);
+void printStat();
+
 int calc_checksum(const pkt* p);
+
 pkt make_pkt(msg message, int seqNum, int ackNum = ACK_DEFAULT);
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
@@ -66,6 +70,9 @@ struct pkt cur_pkt;
 void A_output(struct msg message)
 {
     rtp_layer_t& rtp_layer = A_rtp;
+
+    ++rtp_layer.cnt_layer5;
+
     /* If the last packet have not been ACKed, just drop this message */
     if(rtp_layer.senderState != WAITING_FOR_PKT)
     {
@@ -80,7 +87,7 @@ void A_output(struct msg message)
 	tolayer3(A, cur_pkt);
 	++rtp_layer.cnt_layer3;
 
-    printLog(A, "Sent packet to layer3", &cur_pkt, &message);
+    printLog(A, const_cast<char *>("Sent packet to layer3"), &cur_pkt, &message);
 	starttimer(A,TIMEOUT);
 }
 
@@ -151,25 +158,24 @@ void B_input(struct pkt packet)
     printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
     ++rtp_layer.cnt_layer3;
 
-    /* check checksum, if corrupted, just drop the package */
-//    if(packet.checksum != calc_checksum(&packet))
-//    {
-//        printLog(B, const_cast<char *>("Packet is corrupted"), &packet, NULL);
-//        return;
-//    }
+	/* normal packet, deliver data to layer5 */
+	if (packet.seqnum == rtp_layer.seqnum && packet.checksum == calc_checksum(&packet)) {
+		rtp_layer.seqnum = (rtp_layer.seqnum + 1) % 2;
+		tolayer5(B, packet.payload);
+		++rtp_layer.cnt_layer5;
+		printLog(B, const_cast<char *>("Sent packet to layer5"), &packet, NULL);
+	}
+
+	/* check checksum, if corrupted*/
+    if(packet.checksum != calc_checksum(&packet))
+    {
+        printLog(B, const_cast<char *>("Data Packet is corrupted"), &packet, NULL);
+    }
 
     /* duplicate pkt resends the ACK*/
     if(packet.seqnum != rtp_layer.seqnum)
     {
         printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
-    }
-    /* normal package, deliver data to layer5 */
-    else
-    {
-        rtp_layer.seqnum = (rtp_layer.seqnum + 1)%2;
-        tolayer5(B, packet.payload);
-        ++rtp_layer.cnt_layer5;
-        printLog(B, const_cast<char *>("Sent packet to layer5"), &packet, NULL);
     }
 
     tolayer3(B, make_pkt(packet.payload,packet.seqnum,packet.seqnum));
@@ -329,6 +335,7 @@ terminate:
     printf(
         " Simulator terminated at time %f\n after sending %d msgs from layer5\n",
         time, nsim);
+    printStat();
 }
 
 void init() /* initialize the simulator */
@@ -610,19 +617,23 @@ void tolayer5(int AorB, char datasent[20])
 /******************* DEBUG ***********************/
 void printLog(int AorB, char *msg, struct pkt *p, struct msg *m)
 {
+//    freopen("out.log","a",stdout);
+    FILE* fp = fopen("out.log","a");
     char ch = (AorB == A)?'A':'B';
     if(p != NULL)
     {
 //        printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
-        printf("[%c] %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch,
+        fprintf(fp,"[%c] %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch,
                msg, p->seqnum, p->acknum, p->checksum, p->payload[0]);
     }
     else if(m != NULL) {
 //	    printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
-        printf("[%c] %s. Message[data=%c..]\n", ch, msg, m->data[0]);
+        fprintf(fp,"[%c] %s. Message[data=%c..]\n", ch, msg, m->data[0]);
     } else {
-        printf("[%c] %s.\n", ch, msg);
+        fprintf(fp,"[%c] %s.\n", ch, msg);
     }
+//    freopen("out.log","a",stdout);
+    fclose(fp);
 }
 
 
@@ -633,14 +644,21 @@ int calc_checksum(const pkt* p){
 
 pkt make_pkt(msg message, int seqNum, int ackNum) {
 	pkt packet = {seqNum, ackNum, 0, ""};
-	packet.checksum = calc_checksum(&packet);
 	strncpy(packet.payload, message.data, MSG_LEN);
+    packet.checksum = calc_checksum(&packet);
 	return packet;
 }
 
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum) {
     pkt packet = {seqNum, ackNum, 0, ""};
-    packet.checksum = calc_checksum(&packet);
     strncpy(packet.payload, data, MSG_LEN);
+    packet.checksum = calc_checksum(&packet);
     return packet;
+}
+
+void printStat() {
+    printf("#Sent Packets from Layer5-to   A: %d\n",A_rtp.cnt_layer5);
+    printf("#Sent Packets to   Layer3-from A: %d\n",A_rtp.cnt_layer3);
+    printf("#Sent Packets from Layer3-to   B: %d\n",B_rtp.cnt_layer3);
+    printf("#Sent Packets to   Layer5-from B: %d\n",A_rtp.cnt_layer5);
 }

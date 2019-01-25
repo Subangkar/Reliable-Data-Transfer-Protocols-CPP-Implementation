@@ -5,6 +5,15 @@
 #ifndef RDT_UTILS_H
 #define RDT_UTILS_H
 
+#define DEBUG_ABP
+#define DEBUG_GBN
+
+#define DEBUG_ABP_NMSG 10
+#define DEBUG_ABP_PROB_LOSS 0.1
+#define DEBUG_ABP_PROB_CORP 0.0
+#define DEBUG_ABP_TIME 100
+#define DEBUG_ABP_TRACE 0
+
 //#include <cstdio>
 
 ///======================= Data Defn ===================
@@ -41,19 +50,15 @@ Seqnum and acknum may also be corrupted, so we need to add seqnum and acknum.
  * There is no perfect method for checksum, only suitable method.
  * In this assignment, we only need to add all of them as it is simple and it works well.
 */
-
+/// simple sum of all
 int calc_checksum(int seqnum, int acknum, const char payload[MSG_LEN]) {
 	int i;
-	int checksum = 0; /*First init to Zero*/
-/*Add all the characters in payload*/
-	for (i = 0; i < 20; i++) { // check till NULL
+	int checksum = 0;
+	for (i = 0; i < MSG_LEN; i++) { // check till NULL
 		checksum += (unsigned char) payload[i];
 	}
-	/*add the seqnum*/
 	checksum += seqnum;
-	/*add the acknum*/
 	checksum += acknum;
-/*Then we get the final checksum.*/
 	return checksum;
 }
 
