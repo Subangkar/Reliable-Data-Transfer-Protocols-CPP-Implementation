@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "Utils.h"
+
 /* ******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: SLIGHTLY MODIFIED
  FROM VERSION 1.1 of J.F.Kurose
@@ -45,12 +47,41 @@ void stoptimer(int AorB);
 void tolayer3(int AorB, struct pkt packet);
 void tolayer5(int AorB, char datasent[20]);
 
+void printLog(int AorB, char *msg, struct pkt *p, struct msg *m);
+int calc_checksum(const pkt* p);
+pkt make_pkt(msg message, int seqNum, int ackNum = ACK_DEFAULT);
+pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
+#define A 0
+#define B 1
 
-/* called from layer 5, passed the data to be sent to other side */
+#define TIMEOUT 40.0
+
+rtp_layer_t A_rtp,B_rtp;
+struct pkt cur_pkt;
+
+/* called from layer 5, passed the data to be sent to other side
+ * called with msg to send pkt
+*/
 void A_output(struct msg message)
 {
+    rtp_layer_t& rtp_layer = A_rtp;
+    /* If the last packet have not been ACKed, just drop this message */
+    if(rtp_layer.senderState != WAITING_FOR_PKT)
+    {
+        printLog(A, const_cast<char *>("Drop this message, last message have not finished"), NULL, &message);
+        return;
+    }
 
+    rtp_layer.senderState = WAITING_FOR_ACK;/* set current pkt to not finished */
+
+	cur_pkt = make_pkt(message, rtp_layer.seqnum, ACK_DEFAULT);/* sending packets do not need to set acknum */
+
+	tolayer3(A, cur_pkt);
+	++rtp_layer.cnt_layer3;
+
+    printLog(A, "Sent packet to layer3", &cur_pkt, &message);
+	starttimer(A,TIMEOUT);
 }
 
 /* need be completed only for extra credit */
@@ -62,20 +93,52 @@ void B_output(struct msg message)
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet)
 {
+	rtp_layer_t& rtp_layer = A_rtp;
+	printLog(A, const_cast<char *>("Receive ACK packet from layer3"), &packet, NULL);
 
+	/// if packet has been received successfully
+	if(packet.acknum == rtp_layer.seqnum && packet.checksum == calc_checksum(&packet)){
+		rtp_layer.seqnum = (rtp_layer.seqnum + 1) % 2;
+		stoptimer(A);/// stop timer before changing state
+		rtp_layer.senderState = WAITING_FOR_PKT;
+
+		printLog(A, const_cast<char *>("ACK packet process successfully accomplished!!"), &packet, NULL);
+		return;
+	}
+
+	/* check checksum, if corrupted*/
+	if(packet.checksum != calc_checksum(&packet))
+	{
+		printLog(A, const_cast<char *>("ACK packet is corrupted"), &packet, NULL);
+	}
+	/* NAK or duplicate ACK */
+	if(packet.acknum != rtp_layer.seqnum)
+	{
+		printLog(A, const_cast<char *>("ACK is not expected"), &packet, NULL);
+	}
 }
 
 /* called when A's timer goes off */
-void A_timerinterrupt(void)
+void A_timerinterrupt()
 {
-
+    rtp_layer_t& rtp_layer = A_rtp;
+    printLog(A, const_cast<char *>("Timeout occurred"), &cur_pkt, NULL);
+    if (rtp_layer.senderState == WAITING_FOR_ACK) { // should be a redundant check
+        printLog(A, const_cast<char *>("Timeout! Send out the package again"), &cur_pkt, NULL);
+        tolayer3(A, cur_pkt);
+        ++rtp_layer.cnt_layer3;
+        starttimer(A, TIMEOUT);
+    }
+    else{
+        perror("Problem\n");
+    }
 }
 
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
-void A_init(void)
+void A_init()
 {
-
+	A_rtp = {0, WAITING_FOR_PKT, 0, 0};
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -83,7 +146,34 @@ void A_init(void)
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 void B_input(struct pkt packet)
 {
+    rtp_layer_t& rtp_layer = B_rtp;
 
+    printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
+    ++rtp_layer.cnt_layer3;
+
+    /* check checksum, if corrupted, just drop the package */
+//    if(packet.checksum != calc_checksum(&packet))
+//    {
+//        printLog(B, const_cast<char *>("Packet is corrupted"), &packet, NULL);
+//        return;
+//    }
+
+    /* duplicate pkt resends the ACK*/
+    if(packet.seqnum != rtp_layer.seqnum)
+    {
+        printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
+    }
+    /* normal package, deliver data to layer5 */
+    else
+    {
+        rtp_layer.seqnum = (rtp_layer.seqnum + 1)%2;
+        tolayer5(B, packet.payload);
+        ++rtp_layer.cnt_layer5;
+        printLog(B, const_cast<char *>("Sent packet to layer5"), &packet, NULL);
+    }
+
+    tolayer3(B, make_pkt(packet.payload,packet.seqnum,packet.seqnum));
+    printLog(B, const_cast<char *>("Send ACK packet to layer3"), &packet, NULL);
 }
 
 /* called when B's timer goes off */
@@ -94,9 +184,9 @@ void B_timerinterrupt(void)
 
 /* the following rouytine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
-void B_init(void)
+void B_init()
 {
-
+    B_rtp = {0, WAITING_FOR_ACK, 0, 0};
 }
 
 /*****************************************************************
@@ -133,8 +223,6 @@ struct event *evlist = NULL; /* the event list */
 
 #define OFF 0
 #define ON 1
-#define A 0
-#define B 1
 
 int TRACE = 1;     /* for my debugging */
 int nsim = 0;      /* number of messages from 5 to 4 so far */
@@ -516,4 +604,43 @@ void tolayer5(int AorB, char datasent[20])
             printf("%c", datasent[i]);
         printf("\n");
     }
+}
+
+
+/******************* DEBUG ***********************/
+void printLog(int AorB, char *msg, struct pkt *p, struct msg *m)
+{
+    char ch = (AorB == A)?'A':'B';
+    if(p != NULL)
+    {
+//        printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
+        printf("[%c] %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch,
+               msg, p->seqnum, p->acknum, p->checksum, p->payload[0]);
+    }
+    else if(m != NULL) {
+//	    printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
+        printf("[%c] %s. Message[data=%c..]\n", ch, msg, m->data[0]);
+    } else {
+        printf("[%c] %s.\n", ch, msg);
+    }
+}
+
+
+//===================== Utils =====================
+int calc_checksum(const pkt* p){
+    calc_checksum(p->seqnum,p->acknum,p->payload);
+}
+
+pkt make_pkt(msg message, int seqNum, int ackNum) {
+	pkt packet = {seqNum, ackNum, 0, ""};
+	packet.checksum = calc_checksum(&packet);
+	strncpy(packet.payload, message.data, MSG_LEN);
+	return packet;
+}
+
+pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum) {
+    pkt packet = {seqNum, ackNum, 0, ""};
+    packet.checksum = calc_checksum(&packet);
+    strncpy(packet.payload, data, MSG_LEN);
+    return packet;
 }
