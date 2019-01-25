@@ -19,6 +19,7 @@
 ///======================= Data Defn ===================
 
 #define MSG_LEN 20
+#define BUF_SIZE 7
 
 struct msg;
 struct pkt;
@@ -33,6 +34,7 @@ struct rtp_layer_t{
 	sender_state senderState;
 	int cnt_layer3;
 	int cnt_layer5;
+	pkt* buffer;
 };
 ///=============================================================
 
