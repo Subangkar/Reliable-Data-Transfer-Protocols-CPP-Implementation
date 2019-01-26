@@ -8,7 +8,7 @@
 #define DEBUG_ABP
 #define DEBUG_GBN
 
-#define DEBUG_ABP_NMSG 1000
+#define DEBUG_ABP_NMSG 100
 #define DEBUG_ABP_PROB_LOSS 0.2//0.05
 #define DEBUG_ABP_PROB_CORP 0.3//0.45
 #define DEBUG_ABP_TIME 100
@@ -37,13 +37,6 @@ enum sender_state {
 	WAITING_FOR_PKT, WAITING_FOR_ACK
 };
 
-struct rtp_layer_t {
-	int seqnum;/// current expected seq
-	sender_state senderState;
-	int cnt_layer3;
-	int cnt_layer5;
-	pkt *buffer;
-};
 ///=============================================================
 
 /*This is the implementation of checksum. Data packets and ACK packets use the same method. */

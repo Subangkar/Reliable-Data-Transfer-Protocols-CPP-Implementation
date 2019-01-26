@@ -40,6 +40,14 @@ struct pkt {
 	char payload[20];
 };
 
+struct rtp_layer_abp_t {
+	int seqnum;/// current expected seq
+	sender_state senderState;
+	int cnt_layer3;
+	int cnt_layer5;
+	pkt *buffer;
+};
+
 /********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
 void starttimer(int AorB, float increment);
 
@@ -62,16 +70,16 @@ pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 #define A 0
 #define B 1
 
-#define TIMEOUT 10.0
+#define TIMEOUT 20.0
 
-rtp_layer_t A_rtp, B_rtp;
+rtp_layer_abp_t A_rtp, B_rtp;
 struct pkt cur_pkt;
 
 /* called from layer 5, passed the data to be sent to other side
  * called with msg to send pkt
 */
 void A_output(struct msg message) {
-	rtp_layer_t &rtp_layer = A_rtp;
+	rtp_layer_abp_t &rtp_layer = A_rtp;
 
 	++rtp_layer.cnt_layer5;
 
@@ -99,7 +107,7 @@ void B_output(struct msg message) {
 
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet) {
-	rtp_layer_t &rtp_layer = A_rtp;
+	rtp_layer_abp_t &rtp_layer = A_rtp;
 	printLog(A, const_cast<char *>("Receive ACK packet from layer3"), &packet, NULL);
 
 	/// if packet has been received successfully
@@ -113,26 +121,31 @@ void A_input(struct pkt packet) {
 	}
 
 	/* check checksum, if corrupted*/
-	if (packet.checksum != calc_checksum(&packet)) {
+	else if (packet.checksum != calc_checksum(&packet)) {
 		printLog(A, const_cast<char *>("ACK packet is corrupted"), &packet, NULL);
 	}
-	/* NAK or duplicate ACK */
-	if (packet.acknum != rtp_layer.seqnum) {
-		printLog(A, const_cast<char *>("ACK is not expected"), &packet, NULL);
+	/* NAK or duplicate ACK : corrupted packet received */
+	else if (packet.acknum != rtp_layer.seqnum) {
+		stoptimer(A);
+		printLog(A, const_cast<char *>("ACK is not expected : NACK"), &packet, NULL);
+		printLog(A, const_cast<char *>("Resend the packet again"), &cur_pkt, NULL);
+		tolayer3(A, cur_pkt);
+		++rtp_layer.cnt_layer3;
+		starttimer(A, TIMEOUT);
 	}
 }
 
 /* called when A's timer goes off */
 void A_timerinterrupt() {
-	rtp_layer_t &rtp_layer = A_rtp;
+	rtp_layer_abp_t &rtp_layer = A_rtp;
 	printLog(A, const_cast<char *>("Timeout occurred"), &cur_pkt, NULL);
 	if (rtp_layer.senderState == WAITING_FOR_ACK) { // should be a redundant check
-		printLog(A, const_cast<char *>("Timeout! Send out the packet again"), &cur_pkt, NULL);
+		printLog(A, const_cast<char *>("Timeout! Resend the packet again"), &cur_pkt, NULL);
 		tolayer3(A, cur_pkt);
 		++rtp_layer.cnt_layer3;
 		starttimer(A, TIMEOUT);
 	} else {
-		perror("Problem\n");
+		perror(">> Problem\n");
 	}
 }
 
@@ -146,7 +159,7 @@ void A_init() {
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 void B_input(struct pkt packet) {
-	rtp_layer_t &rtp_layer = B_rtp;
+	rtp_layer_abp_t &rtp_layer = B_rtp;
 
 	printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
 	++rtp_layer.cnt_layer3;
@@ -161,7 +174,7 @@ void B_input(struct pkt packet) {
 	}
 
 	/* check checksum, if corrupted*/
-	if (packet.checksum != calc_checksum(&packet)) {
+	else if (packet.checksum != calc_checksum(&packet)) {
 		printLog(B, const_cast<char *>("Data Packet is corrupted"), &packet, NULL);
 	}
 
@@ -169,7 +182,7 @@ void B_input(struct pkt packet) {
 	else if (packet.seqnum != rtp_layer.seqnum) {
 		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
 	}
-	tolayer3(B, ack); // seqnum doesn't have any meaning here
+	tolayer3(B, ack); // nextseqnum doesn't have any meaning here
 	printLog(B, const_cast<char *>("Send ACK packet to layer3"), &ack, NULL);
 }
 
@@ -592,11 +605,11 @@ void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
 	FILE *fp = fopen("out.log", "a");
 	char ch = (AorB == A) ? 'A' : 'B';
 	if (p != NULL) {
-//        printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
+//        printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
 		fprintf(fp, "[%c] @%f %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, time,
 		        msg, p->seqnum, p->acknum, p->checksum, p->payload[0]);
 	} else if (m != NULL) {
-//	    printLog(ch,msg,p->seqnum,p->acknum,p->checksum,p->payload,m->data);
+//	    printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
 		fprintf(fp, "[%c] @%f %s. Message[data=%c..]\n", ch, time, msg, m->data[0]);
 	} else {
 		fprintf(fp, "[%c] @%f %s.\n", ch, time, msg);

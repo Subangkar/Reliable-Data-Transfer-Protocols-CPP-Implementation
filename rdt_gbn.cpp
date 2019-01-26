@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <queue>
 
 #include "Utils.h"
 
@@ -39,6 +40,15 @@ struct pkt {
 	char payload[20];
 };
 
+struct rtp_layer_gbn_t {
+	int nextseqnum;/// current expected seq
+//	sender_state senderState;
+	int cnt_layer3;
+	int cnt_layer5;
+	pkt *buffer;
+	int base;
+};
+
 /********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
 void starttimer(int AorB, float increment);
 
@@ -48,16 +58,49 @@ void tolayer3(int AorB, struct pkt packet);
 
 void tolayer5(int AorB, char datasent[20]);
 
+void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m);
+
+void Debug_Log(int AorB, char *msg, const struct pkt *p, struct msg *m);
+
+void printStat();
+
+int calc_checksum(const pkt *p);
+
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
 #define A 0
 #define B 1
 
-rtp_layer_t A_rtp, B_rtp;
+#define TIMEOUT 20.0
+
+#define WINDOW_SIZE 7
+
+std::queue<msg> A_buffer, B_buffer;
+pkt A_window[WINDOW_SIZE], B_window[WINDOW_SIZE];
+
+
+rtp_layer_gbn_t A_rtp, B_rtp;
+
+///============================ Timer Functions ============================
+#define MAX_TIMERS (WINDOW_SIZE+1)
+bool hasTimerStarted;
+//float timersQ[MAX_TIMERS];
+std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
+
+///
+void startTimer(int AorB, int timerNo, float increment);
+
+void stopTimer(int AorB, int timerNo = 0);
+
+void resetTimers(int AorB);
+
+void startNextTimer(int AorB);
+///=========================================================================
+
 
 /* called from layer 5, passed the data to be sent to other side */
 void A_output(struct msg message) {
-
+	rtp_layer_gbn_t &rtp_layer_gbn = A_rtp;
 }
 
 /* need be completed only for extra credit */
@@ -77,8 +120,8 @@ void A_timerinterrupt(void) {
 
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
-void A_init(void) {
-
+void A_init() {
+	A_rtp = {0, 0, 0, nullptr, 0};
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -95,8 +138,8 @@ void B_timerinterrupt(void) {
 
 /* the following rouytine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
-void B_init(void) {
-
+void B_init() {
+	B_rtp = {0, 0, 0, nullptr, 0};
 }
 
 /*****************************************************************
@@ -228,6 +271,7 @@ int main() {
 	printf(
 			" Simulator terminated at time %f\n after sending %d msgs from layer5\n",
 			time, nsim);
+
 }
 
 void init() /* initialize the simulator */
@@ -279,6 +323,7 @@ void init() /* initialize the simulator */
 	nlost = 0;
 	ncorrupt = 0;
 
+	hasTimerStarted = false;
 	time = 0.0;              /* initialize time to 0.0 */
 	generate_next_arrival(); /* initialize event list */
 }
@@ -523,4 +568,65 @@ void printStat() {
 	printf("#Sent Packets to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
 	printf("#Sent Packets from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
 	printf("#Sent Packets to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
+}
+
+void Debug_Log(int AorB, char *msg, const struct pkt *p, struct msg *m) {
+	char ch = (AorB == A) ? 'A' : 'B';
+	if (AorB == A) {
+		if (p != NULL) {
+			printf("[%c] %s. Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
+			       A_rtp.base, A_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
+		} else if (m != NULL) {
+			printf("[%c] %s. Window[%d,%d) Message[data=%c..]\n", ch, msg, A_rtp.base, A_rtp.nextseqnum, m->data[0]);
+		} else {
+			printf("[%c] %s.Window[%d,%d)\n", ch, msg, A_rtp.base, A_rtp.nextseqnum);
+		}
+	} else {
+		if (p != NULL) {
+			printf("[%c] %s. Expected[%d] Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
+			       B_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
+		} else if (m != NULL) {
+			printf("[%c] %s. Expected[%d] Message[data=%c..]\n", ch, msg, B_rtp.nextseqnum, m->data[0]);
+		} else {
+			printf("[%c] %s.Expected[%d]\n", ch, msg, B_rtp.nextseqnum);
+		}
+	}
+}
+
+//============================ Timers =====================================
+void startTimer(int AorB, int timerNo, float increment) {
+	if (!hasTimerStarted) {
+		starttimer(AorB, increment);
+		hasTimerStarted = true;
+		return;
+	}
+	timersQ.push(std::make_pair(time, increment));
+}
+
+void stopTimer(int AorB, int timerNo) {
+	if (!hasTimerStarted)
+		return;
+	stoptimer(AorB);
+	hasTimerStarted = false;
+
+	// clear all timers that already been passed. redundant in GBN
+	while (!timersQ.empty() && (timersQ.front().second - timersQ.front().first) <= 0.0) timersQ.pop();
+
+	if (!timersQ.empty()) {
+		starttimer(AorB, (timersQ.front().second - timersQ.front().first));
+		timersQ.pop();
+		hasTimerStarted = true;
+	}
+}
+
+void resetTimers(int AorB) {
+	if (!hasTimerStarted)
+		return;
+	stoptimer(AorB);
+	hasTimerStarted = false;
+	while(!timersQ.empty()) timersQ.pop();
+}
+
+void startNextTimer(int AorB) {
+
 }
