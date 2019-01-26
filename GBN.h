@@ -1,5 +1,6 @@
 //
-// Created by Subangkar on 26-Jan-19.//
+// Created by Subangkar on 26-Jan-19.
+//
 
 #include "Utils.h"
 
@@ -52,19 +53,14 @@ pkt make_pkt(msg message, int seqNum, int ackNum = ACK_ABP_DEFAULT);
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 
 ///============================ Timer Functions ============================
-//#define MAX_TIMERS (WINDOW_SIZE+1)
-//bool hasTimerStarted;
-//float timersQ[MAX_TIMERS];
-//std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
 
-///
 void startTimer(int AorB, int timerNo, float increment);
 
 void stopTimer(int AorB, int timerNo = 0);
 
 void resetTimers(int AorB);
 
-void startNextTimer(int AorB);
+void clearTimerFlag(int AorB);
 ///=========================================================================
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
@@ -74,11 +70,10 @@ void startNextTimer(int AorB);
 void A_output(msg);
 
 
-/* common defines */
 #define   A    0
 #define   B    1
-/* timeout for the timer */
-#define TIMEOUT 20.0
+
+#define TIMEOUT 30.0
 
 #define EXTRA_BUFFER_SIZE 50
 #define WINDOW_SIZE 7
@@ -95,9 +90,6 @@ rtp_layer_gbn_t A_rtp, B_rtp;
 /* current expected seq for B */
 int B_seqnum = 0;
 
-/* defines for statistic */
-int A_from_layer5 = 0;
-int A_to_layer3 = 0;
 int B_from_layer3 = 0;
 int B_to_layer5 = 0;
 
@@ -107,99 +99,16 @@ int nextseq = 0;
 int packets_base = 0;
 struct pkt packets[N];
 
-/// ====================== Queue - Implementation =======================
-/* extra buffer used when window is full */
-struct node {
-	struct msg message;
-	struct node *next;
-};
-struct node *list_head = NULL;
-struct node *list_end = NULL;
-int Extra_BufSize = 0;
-
-void append_msg(struct msg *m) {
-	int i;
-	/*allocate memory*/
-	struct node *n = (node *) malloc(sizeof(struct node));
-	if (n == NULL) {
-		printf("no enough memory\n");
-		return;
-	}
-	n->next = NULL;
-	/*copy packet*/
-	for (i = 0; i < 20; ++i) {
-		n->message.data[i] = m->data[i];
-	}
-
-	/* if list empty, just add into the list*/
-	if (list_end == NULL) {
-		list_head = n;
-		list_end = n;
-		++Extra_BufSize;
-		return;
-	}
-	/* otherwise, add at the end*/
-	list_end->next = n;
-	list_end = n;
-	++Extra_BufSize;
-}
-
-struct node *pop_msg() {
-	struct node *p;
-	/* if the list is empty, return NULL*/
-	if (list_head == NULL) {
-		return NULL;
-	}
-
-	/* retrive the first node*/
-	p = list_head;
-	list_head = p->next;
-	if (list_head == NULL) {
-		list_end = NULL;
-	}
-	--Extra_BufSize;
-
-	return p;
-}
-/// ====================== Queue - Implementation - END =======================
 
 bool windowIsFull(const rtp_layer_gbn_t &rtp_layer) {
 //	return nextseq >= base + N;
 	return rtp_layer.nextseqnum == ((rtp_layer.base + WINDOW_SIZE) % SEQ_NUM_SIZE);
 }
 
-struct pkt *get_free_packet() {
-	/* check is window full */
-	if (windowIsFull(A_rtp)) {
-		printLog(A, const_cast<char *>("Alloc packet failed.The window is full already"), NULL, NULL);
-		return nullptr;
-	}
-
-	/* get next free packet */
-//	int cur_index = (packets_base + nextseq - base) % N;
-
-	return &(packets[A_rtp.nextseqnum]);
-}
-
-struct pkt *get_packet(int seqnum) {
-	int cur_index = 0;
-	if (seqnum < base || seqnum >= nextseq) {
-		printLog(A, const_cast<char *>("Seqnum is not within the window"), NULL, NULL);
-		return NULL;
-	}
-
-	cur_index = (packets_base + seqnum - base) % N;
-	return &(packets[cur_index]);
-}
-
 void free_packets(int acknum) {
 	if (acknum < base || acknum >= nextseq)return;
-	rtp_layer_gbn_t& rtp_layer = A_rtp;
+	rtp_layer_gbn_t &rtp_layer = A_rtp;
 
-//	int count = acknum - base + 1;
-//	packets_base += count;
-//	packets_base = packets_base % N;
-//	base = (acknum + 1) % SEQ_NUM_SIZE;
 	int count = acknum - rtp_layer.base + 1;
 	rtp_layer.base = (acknum + 1) % SEQ_NUM_SIZE;
 
@@ -208,18 +117,9 @@ void free_packets(int acknum) {
 	//when the window size decrease, check the
 	//extra buffer, if we need any message need to send
 	while (count > 0 && !A_rtp.msgbuffer->empty()) {
-//		stopTimer(A);
-//		struct node *n = pop_msg();
-//		if (n == NULL) {
-//			break;
-//		}
 		msg message = A_rtp.msgbuffer->front();
 		A_rtp.msgbuffer->pop();
 		A_output(message);
-//		free(n);
-//		if (!A_rtp.msgbuffer->empty()) {
-//			tolayer3(A,make_pkt(q.front()))
-//		}
 		count--;
 	}
 }
@@ -229,6 +129,16 @@ void addPacketToWindow(rtp_layer_gbn_t &rtp_layer, pkt &packet) {
 	rtp_layer.windowbuffer[rtp_layer.nextseqnum] = packet;
 	rtp_layer.nextseqnum = (rtp_layer.nextseqnum + 1) % SEQ_NUM_SIZE;
 }
+
+void retransmitCurrentWindow(rtp_layer_gbn_t &rtp_layer) {
+	for (int i = rtp_layer.base; i < rtp_layer.nextseqnum; i = (i + 1) % SEQ_NUM_SIZE) {
+		tolayer3(A, rtp_layer.windowbuffer[i]);
+		startTimer(A, i, TIMEOUT);
+//		++A_to_layer3;
+		++A_rtp.cnt_layer3;
+		printLog(A, const_cast<char *>(">Resend the packet again"), &rtp_layer.windowbuffer[i], NULL);
+	}
+}
 /* called from layer 5, passed the data to be sent to other side */
 
 /* Every time there is a new packet come,
@@ -236,7 +146,6 @@ void addPacketToWindow(rtp_layer_gbn_t &rtp_layer, pkt &packet) {
  * c) If the window is not full, we retrieve one packet at the beginning of the extra buffer, and process it.*/
 void A_output(struct msg message) {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
-	struct node *n;
 
 	if (rtp_layer.msgbuffer->size() >= EXTRA_BUFFER_SIZE) {
 		printLog(A, const_cast<char *>("Extra Buffer full. Dropping Message!!!"), nullptr, &message);
@@ -244,7 +153,6 @@ void A_output(struct msg message) {
 	}
 /*Step (a)*/
 	rtp_layer.msgbuffer->push(message);
-//	append_msg(&message);
 
 /* If the last packet have not been ACKed, just drop this message */
 /*Step (b)*/
@@ -259,99 +167,67 @@ void A_output(struct msg message) {
 		perror("No message need to process\n");
 		return;
 	}
-//	n = pop_msg();
+
 	rtp_layer.msgbuffer->pop();
-/* get a free packet from the buf */
-//	pkt *p = get_free_packet();
-//	if (p == NULL) {
-//		printLog(A, const_cast<char *>("BUG! The window is full already"), NULL, &message);
-//		return;
-//	}
-	++A_from_layer5;
+
+//	++A_from_layer5;
 	++rtp_layer.cnt_layer5;
 	printLog(A, const_cast<char *>("Receive an message from layer5"), NULL, &message);
-//	strncpy(p->payload, message.data, MSG_LEN);
-//	free(n);
 
-//	p->seqnum = nextseq;
-//	p->acknum = ACK_GBN_DEFAULT;
-//	p->checksum = calc_checksum(p);
-
-//	rtp_layer.msgbuffer->pop();
-//	if (base == nextseq) {
-//		starttimer(A, TIMEOUT);
-//	}
 
 	pkt packet = make_pkt(message, rtp_layer.nextseqnum, ACK_GBN_DEFAULT);
 	++nextseq;
 	addPacketToWindow(rtp_layer, packet);
 	tolayer3(A, packet);
 	startTimer(A, rtp_layer.nextseqnum, TIMEOUT);
-	++A_to_layer3;
+//	++A_to_layer3;
 	++rtp_layer.cnt_layer3;
 
 	printLog(A, const_cast<char *>("Send packet to layer3"), &packet, &message);
 }
 
-void B_output(struct msg message)  /* need be completed only for extra credit */
-{
+void B_output(struct msg message) {
 }
 
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet) {
 	printLog(A, const_cast<char *>("Receive ACK packet from layer3"), &packet, NULL);
 
-/* check checksum, if corrupted, do nothing */
+	/* Corrupted ACK -> ignore */
 	if (packet.checksum != calc_checksum(&packet)) {
 		printLog(A, const_cast<char *>("ACK packet is corrupted"), &packet, NULL);
 		return;
 	}
 
-/* Duplicate ACKs, do nothing */
+	/* Duplicate ACK: NACK -> resend all */
 	if (packet.acknum < base) {
 		printLog(A, const_cast<char *>("Receive duplicate ACK"), &packet, NULL);
-		return;
-	} else if (packet.acknum >= nextseq) {
-		printLog(A, const_cast<char *>("BUG: receive ACK of future packets"), &packet, NULL);
+		resetTimers(A);
+		retransmitCurrentWindow(A_rtp);
 		return;
 	}
-
-/* go to the next seq, and stop the timer */
-	free_packets(packet.acknum);
-
-/* stop timer of the oldest packet, and if there
-   is still some packets on network, we need start
-   another packet  */
-//	stopTimer(A);
-//	stoptimer(A);
-//	if (base != nextseq) {
-//		starttimer(A, TIMEOUT);
+//	else if (packet.acknum >= nextseq) {
+//		printLog(A, const_cast<char *>("BUG: receive ACK of future packets"), &packet, NULL);
+//		return;
 //	}
 
-	printLog(A, const_cast<char *>("ACK packet process successfully accomplished!!"), &packet, NULL);
-//	printf("================================ Outside A_input===================================\n");
+	/* go to the next base,seq and stop the timer */
+	free_packets(packet.acknum);
+
+	printLog(A, const_cast<char *>("ACK packet processed successfully !!"), &packet, NULL);
 }
 
 /* called when A's timer goes off */
 void A_timerinterrupt() {
+	clearTimerFlag(A);
 	resetTimers(A);
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
-	printLog(A, const_cast<char *>("Time interrupt occur"), NULL, NULL);
-	/* if current package no finished, we resend it */
-	for (int i = rtp_layer.base; i < rtp_layer.nextseqnum; i = (i + 1) % SEQ_NUM_SIZE) {
-//		struct pkt *p = get_packet(i);
-//		tolayer3(A, *p);
-		tolayer3(A, rtp_layer.windowbuffer[i]);
-		startTimer(A, i, TIMEOUT);
-		++A_to_layer3;
-		++A_rtp.cnt_layer3;
-		printLog(A, const_cast<char *>("Timeout! Send out the package again"), &rtp_layer.windowbuffer[i], NULL);
+	if (rtp_layer.base == rtp_layer.nextseqnum) {
+		perror(">> Problem: timer interrupt occurred with empty window\n");
 	}
-
-	/* If there is still some packets, start the timer again */
-//	if (base != nextseq) {
-//		starttimer(A, TIMEOUT);
-//	}
+	printLog(A, const_cast<char *>("Timer interrupt occurred"), NULL, NULL);
+	/* if current packets not ACKed, resend it */
+	retransmitCurrentWindow(rtp_layer);
 }
 
 /* the following routine will be called once (only) before any other */
@@ -442,7 +318,8 @@ void writeLog(FILE *fp, int AorB, char *msg, const struct pkt *p, struct msg *m,
 			fprintf(fp, "[%c] @%f %s.Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time, msg,
 			        A_rtp.base, A_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload);
 		} else if (m != NULL) {
-			fprintf(fp, "[%c] @%f %s.Window[%d,%d) Message[data=%s..]\n", ch, time, msg, A_rtp.base, A_rtp.nextseqnum, m->data);
+			fprintf(fp, "[%c] @%f %s.Window[%d,%d) Message[data=%s..]\n", ch, time, msg, A_rtp.base, A_rtp.nextseqnum,
+			        m->data);
 		} else {
 			fprintf(fp, "[%c] @%f %s.Window[%d,%d)\n", ch, time, msg, A_rtp.base, A_rtp.nextseqnum);
 		}

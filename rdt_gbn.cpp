@@ -18,6 +18,8 @@
 **********************************************************************/
 
 /********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
+void timer_init();
+
 void starttimer(int AorB, float increment);
 
 void stoptimer(int AorB);
@@ -33,10 +35,6 @@ void printStat();
 int calc_checksum(const pkt *p);
 
 ///============================ Timer Functions ============================
-#define MAX_TIMERS (WINDOW_SIZE+1)
-bool hasTimerStarted;
-//float timersQ[MAX_TIMERS];
-std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
 
 ///
 void startTimer(int AorB, int timerNo, float increment);
@@ -45,7 +43,7 @@ void stopTimer(int AorB, int timerNo);
 
 void resetTimers(int AorB);
 
-void startNextTimer(int AorB);
+void clearTimerFlag(int AorB);
 ///=========================================================================
 
 
@@ -229,7 +227,7 @@ void init() /* initialize the simulator */
 	nlost = 0;
 	ncorrupt = 0;
 
-	hasTimerStarted = false;
+	timer_init();
 	time = 0.0;              /* initialize time to 0.0 */
 	generate_next_arrival(); /* initialize event list */
 }
@@ -451,6 +449,15 @@ void tolayer5(int AorB, char datasent[20]) {
 
 
 //============================ Timers =====================================
+#define MAX_TIMERS (WINDOW_SIZE+1)
+bool hasTimerStarted;
+//float timersQ[MAX_TIMERS];
+std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
+
+void timer_init() {
+	hasTimerStarted = false;
+}
+
 void startTimer(int AorB, int timerNo, float increment) {
 	if (!hasTimerStarted) {
 		starttimer(AorB, increment);
@@ -467,10 +474,10 @@ void stopTimer(int AorB, int timerNo) {
 	hasTimerStarted = false;
 
 	// clear all timers that already been passed. redundant in GBN
-	while (!timersQ.empty() && (timersQ.front().second - timersQ.front().first) <= 0.0) timersQ.pop();
+	while (!timersQ.empty() && (timersQ.front().second + timersQ.front().first) <= time) timersQ.pop();
 
 	if (!timersQ.empty()) {
-		starttimer(AorB, (timersQ.front().second - timersQ.front().first));
+		starttimer(AorB, (timersQ.front().second - (time - timersQ.front().first)));// timeout-elapsed_time
 		timersQ.pop();
 		hasTimerStarted = true;
 	}
@@ -481,11 +488,11 @@ void resetTimers(int AorB) {
 		return;
 	stoptimer(AorB);
 	hasTimerStarted = false;
-	while(!timersQ.empty()) timersQ.pop();
+	while (!timersQ.empty()) timersQ.pop();
 }
 
-void startNextTimer(int AorB) {
-
+void clearTimerFlag(int AorB) {
+	hasTimerStarted = false;
 }
 
 
