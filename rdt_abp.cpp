@@ -1,26 +1,19 @@
-#include "Utils.h"
-
-#ifdef ABP_SIM
 #include "ABP.h"
-#endif
 
-#ifdef GBN_SIM
-#include "GBN.h"
-#endif
-/* ******************************************************************
- ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: SLIGHTLY MODIFIED
- FROM VERSION 1.1 of J.F.Kurose
-
-   This code should be used for PA2, unidirectional or bidirectional
-   data transfer protocols (from A to B. Bidirectional transfer of data
-   is for extra credit and is not required).  Network properties:
-   - one way network delay averages five time units (longer if there
-       are other messages in the channel for GBN), but can be larger
-   - packets can be corrupted (either the header or the data portion)
-       or lost, according to user-defined probabilities
-   - packets will be delivered in the order in which they were sent
-       (although some can be lost).
-**********************************************************************/
+///* ******************************************************************
+// ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: SLIGHTLY MODIFIED
+// FROM VERSION 1.1 of J.F.Kurose
+//
+//   This code should be used for PA2, unidirectional or bidirectional
+//   data transfer protocols (from A to B. Bidirectional transfer of data
+//   is for extra credit and is not required).  Network properties:
+//   - one way network delay averages five time units (longer if there
+//       are other messages in the channel for GBN), but can be larger
+//   - packets can be corrupted (either the header or the data portion)
+//       or lost, according to user-defined probabilities
+//   - packets will be delivered in the order in which they were sent
+//       (although some can be lost).
+//**********************************************************************/
 
 /*****************************************************************
 ***************** NETWORK EMULATION CODE STARTS BELOW ***********
@@ -159,13 +152,13 @@ void init() /* initialize the simulator */
 	int i;
 	float sum, avg;
 	float jimsrand();
-#ifdef DEBUG_ABP
+#ifdef DEBUG
 //    freopen("in.log","r",stdin);
-	nsimmax = DEBUG_ABP_NMSG;
-	lossprob = DEBUG_ABP_PROB_LOSS;
-	corruptprob = DEBUG_ABP_PROB_CORP;
-	lambda = DEBUG_ABP_TIME;
-	TRACE = DEBUG_ABP_TRACE;
+	nsimmax = DEBUG_NMSG;
+	lossprob = DEBUG_PROB_LOSS;
+	corruptprob = DEBUG_PROB_CORP;
+	lambda = DEBUG_TIME;
+	TRACE = DEBUG_TRACE;
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: %d\n", nsimmax);
 	printf("Enter  packet loss probability [enter 0.0 for no loss]: %f\n", lossprob);
@@ -173,7 +166,7 @@ void init() /* initialize the simulator */
 	printf("Enter average time between messages from sender's layer5 [ > 0.0]: %f\n", lambda);
 	printf("Enter TRACE: %d\n", TRACE);
 #endif
-#ifndef DEBUG_ABP
+#ifndef DEBUG
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: ");
 	scanf("%d",&nsimmax);
@@ -426,20 +419,8 @@ void tolayer5(int AorB, char datasent[20]) {
 void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
 	static bool opened = false;
 	if (!opened) opened = true, fclose(fopen("out.log", "w"));
-//    freopen("out.log","a",stdout);
 	FILE *fp = fopen("out.log", "a");
-	char ch = (AorB == A) ? 'A' : 'B';
-	if (p != NULL) {
-//        printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
-		fprintf(fp, "[%c] @%f %s. Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time,
-		        msg, p->seqnum, p->acknum, p->checksum, p->payload);
-	} else if (m != NULL) {
-//	    printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
-		fprintf(fp, "[%c] @%f %s. Message[data=%s..]\n", ch, time, msg, m->data);
-	} else {
-		fprintf(fp, "[%c] @%f %s.\n", ch, time, msg);
-	}
-//    freopen("out.log","a",stdout);
+	writeLog(fp, AorB, msg, p, m, time);
 	fclose(fp);
 }
 

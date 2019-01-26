@@ -1,9 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <queue>
+#include "GBN.h"
 
-#include "Utils.h"
 
 /* ******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: SLIGHTLY MODIFIED
@@ -20,35 +17,6 @@
        (although some can be lost).
 **********************************************************************/
 
-#define BIDIRECTIONAL 0 /* change to 1 if you're doing extra credit */
-/* and write a routine called B_output */
-
-/* a "msg" is the data unit passed from layer 5 (teachers code) to layer  */
-/* 4 (students' code).  It contains the data (characters) to be delivered */
-/* to layer 5 via the students transport level protocol entities.         */
-struct msg {
-	char data[20];
-};
-
-/* a packet is the data unit passed from layer 4 (students code) to layer */
-/* 3 (teachers code).  Note the pre-defined packet structure, which all   */
-/* students must follow. */
-struct pkt {
-	int seqnum;
-	int acknum;
-	int checksum;
-	char payload[20];
-};
-
-struct rtp_layer_gbn_t {
-	int nextseqnum;/// current expected seq
-//	sender_state senderState;
-	int cnt_layer3;
-	int cnt_layer5;
-	pkt *buffer;
-	int base;
-};
-
 /********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
 void starttimer(int AorB, float increment);
 
@@ -60,34 +28,9 @@ void tolayer5(int AorB, char datasent[20]);
 
 void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m);
 
-void Debug_Log(int AorB, char *msg, const struct pkt *p, struct msg *m);
-
 void printStat();
 
 int calc_checksum(const pkt *p);
-
-/********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
-
-#define A 0
-#define B 1
-
-#define TIMEOUT 20.0
-
-#define WINDOW_SIZE 7
-
-#define N WINDOW_SIZE
-
-std::queue<msg> A_buffer, B_buffer;
-pkt A_window[WINDOW_SIZE], B_window[WINDOW_SIZE];
-
-
-rtp_layer_gbn_t A_rtp, B_rtp;
-
-int A_from_layer5 = 0;
-int A_to_layer3 = 0;
-int B_from_layer3 = 0;
-int B_to_layer5 = 0;
-
 
 ///============================ Timer Functions ============================
 #define MAX_TIMERS (WINDOW_SIZE+1)
@@ -98,57 +41,13 @@ std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
 ///
 void startTimer(int AorB, int timerNo, float increment);
 
-void stopTimer(int AorB, int timerNo = 0);
+void stopTimer(int AorB, int timerNo);
 
 void resetTimers(int AorB);
 
 void startNextTimer(int AorB);
 ///=========================================================================
 
-
-/* called from layer 5, passed the data to be sent to other side */
-void A_output(struct msg message) {
-	rtp_layer_gbn_t &rtp_layer_gbn = A_rtp;
-}
-
-/* need be completed only for extra credit */
-void B_output(struct msg message) {
-
-}
-
-/* called from layer 3, when a packet arrives for layer 4 */
-void A_input(struct pkt packet) {
-
-}
-
-/* called when A's timer goes off */
-void A_timerinterrupt(void) {
-
-}
-
-/* the following routine will be called once (only) before any other */
-/* entity A routines are called. You can use it to do any initialization */
-void A_init() {
-	A_rtp = {0, 0, 0, nullptr, 0};
-}
-
-/* Note that with simplex transfer from a-to-B, there is no B_output() */
-
-/* called from layer 3, when a packet arrives for layer 4 at B*/
-void B_input(struct pkt packet) {
-
-}
-
-/* called when B's timer goes off */
-void B_timerinterrupt(void) {
-	printf("  B_timerinterrupt: B doesn't have a timer. ignore.\n");
-}
-
-/* the following rouytine will be called once (only) before any other */
-/* entity B routines are called. You can use it to do any initialization */
-void B_init() {
-	B_rtp = {0, 0, 0, nullptr, 0};
-}
 
 /*****************************************************************
 ***************** NETWORK EMULATION CODE STARTS BELOW ***********
@@ -279,7 +178,7 @@ int main() {
 	printf(
 			" Simulator terminated at time %f\n after sending %d msgs from layer5\n",
 			time, nsim);
-
+	printStat();
 }
 
 void init() /* initialize the simulator */
@@ -288,13 +187,12 @@ void init() /* initialize the simulator */
 	float sum, avg;
 	float jimsrand();
 
-#ifdef DEBUG_GBN
-//    freopen("in.log","r",stdin);
-	nsimmax = DEBUG_GBN_NMSG;
-	lossprob = DEBUG_GBN_PROB_LOSS;
-	corruptprob = DEBUG_GBN_PROB_CORP;
-	lambda = DEBUG_GBN_TIME;
-	TRACE = DEBUG_GBN_TRACE;
+#ifdef DEBUG
+	nsimmax = DEBUG_NMSG;
+	lossprob = DEBUG_PROB_LOSS;
+	corruptprob = DEBUG_PROB_CORP;
+	lambda = DEBUG_TIME;
+	TRACE = DEBUG_TRACE;
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: %d\n", nsimmax);
 	printf("Enter  packet loss probability [enter 0.0 for no loss]: %f\n", lossprob);
@@ -302,7 +200,7 @@ void init() /* initialize the simulator */
 	printf("Enter average time between messages from sender's layer5 [ > 0.0]: %f\n", lambda);
 	printf("Enter TRACE: %d\n", TRACE);
 #endif
-#ifndef DEBUG_GBN
+#ifndef DEBUG
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: ");
 	scanf("%d", &nsimmax);
@@ -552,55 +450,6 @@ void tolayer5(int AorB, char datasent[20]) {
 }
 
 
-//===================== Utils =====================
-int calc_checksum(const pkt *p) {
-	calc_checksum(p->seqnum, p->acknum, p->payload);
-}
-
-pkt make_pkt(msg message, int seqNum, int ackNum) {
-	pkt packet = {seqNum, ackNum, 0, ""};
-	strncpy(packet.payload, message.data, MSG_LEN);
-	packet.checksum = calc_checksum(&packet);
-	return packet;
-}
-
-pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum) {
-	pkt packet = {seqNum, ackNum, 0, ""};
-	strncpy(packet.payload, data, MSG_LEN);
-	packet.checksum = calc_checksum(&packet);
-	return packet;
-}
-
-void printStat() {
-	printf("#Sent Packets from Layer5-to   A: %d\n", A_rtp.cnt_layer5);
-	printf("#Sent Packets to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
-	printf("#Sent Packets from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
-	printf("#Sent Packets to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
-}
-
-void Debug_Log(int AorB, char *msg, const struct pkt *p, struct msg *m) {
-	char ch = (AorB == A) ? 'A' : 'B';
-	if (AorB == A) {
-		if (p != NULL) {
-			printf("[%c] %s. Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
-			       A_rtp.base, A_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
-		} else if (m != NULL) {
-			printf("[%c] %s. Window[%d,%d) Message[data=%s..]\n", ch, msg, A_rtp.base, A_rtp.nextseqnum, m->data);
-		} else {
-			printf("[%c] %s.Window[%d,%d)\n", ch, msg, A_rtp.base, A_rtp.nextseqnum);
-		}
-	} else {
-		if (p != NULL) {
-			printf("[%c] %s. Expected[%d] Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
-			       B_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
-		} else if (m != NULL) {
-			printf("[%c] %s. Expected[%d] Message[data=%c..]\n", ch, msg, B_rtp.nextseqnum, m->data[0]);
-		} else {
-			printf("[%c] %s.Expected[%d]\n", ch, msg, B_rtp.nextseqnum);
-		}
-	}
-}
-
 //============================ Timers =====================================
 void startTimer(int AorB, int timerNo, float increment) {
 	if (!hasTimerStarted) {
@@ -637,4 +486,14 @@ void resetTimers(int AorB) {
 
 void startNextTimer(int AorB) {
 
+}
+
+
+/******************* DEBUG ***********************/
+void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
+	static bool opened = false;
+	if (!opened) opened = true, fclose(fopen("out.log", "w"));
+	FILE *fp = fopen("out.log", "a");
+	writeLog(fp, AorB, msg, p, m, time);
+	fclose(fp);
 }

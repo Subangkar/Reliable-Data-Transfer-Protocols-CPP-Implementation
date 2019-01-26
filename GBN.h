@@ -1,6 +1,8 @@
 //
-// Created by Subangkar on 26-Jan-19.
-//
+// Created by Subangkar on 26-Jan-19.//
+
+#include "Utils.h"
+
 
 #ifndef RDT_GBN_H
 #define RDT_GBN_H
@@ -8,15 +10,15 @@
 /* and write a routine called B_output */
 
 /* a "msg" is the data unit passed from layer 5 (teachers code) to layer  */
-/* 4 (students' code).  It contains the data (characters) to be delivered */
-/* to layer 5 via the students transport level protocol entities.         */
+/* 4 (students' code).It contains the data (characters) to be delivered */
+/* to layer 5 via the students transport level protocol entities.*/
 struct msg {
 	char data[20];
 };
 
 /* a packet is the data unit passed from layer 4 (students code) to layer */
-/* 3 (teachers code).  Note the pre-defined packet structure, which all   */
-/* students must follow. */
+/* 3 (teachers code).Note the pre-defined packet structure, which all   */
+/* students must follow.*/
 struct pkt {
 	int seqnum;
 	int acknum;
@@ -24,7 +26,16 @@ struct pkt {
 	char payload[20];
 };
 
-/********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
+struct rtp_layer_gbn_t {
+	int nextseqnum;/// current expected seq
+//	sender_state senderState;
+	int cnt_layer3;
+	int cnt_layer5;
+	pkt *buffer;
+	int base;
+};
+
+/********* FUNCTION PROTOTYPES.DEFINED IN THE LATER PART******************/
 void starttimer(int AorB, float increment);
 
 void stoptimer(int AorB);
@@ -33,19 +44,37 @@ void tolayer3(int AorB, struct pkt packet);
 
 void tolayer5(int AorB, char datasent[20]);
 
+void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m);
+
+void printStat();
+
+int calc_checksum(const pkt *p);
+
+pkt make_pkt(msg message, int seqNum, int ackNum = ACK_ABP_DEFAULT);
+
+pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
+
+///============================ Timer Functions ============================
+//#define MAX_TIMERS (WINDOW_SIZE+1)
+//bool hasTimerStarted;
+//float timersQ[MAX_TIMERS];
+//std::queue<std::pair<float, float >> timersQ;// startTime,Timeout
+
+///
+void startTimer(int AorB, int timerNo, float increment);
+
+void stopTimer(int AorB, int timerNo = 0);
+
+void resetTimers(int AorB);
+
+void startNextTimer(int AorB);
+///=========================================================================
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
+
+
+
 void A_output(msg);
-
-void A_init();
-
-void A_input(pkt);
-
-void B_output(msg);
-
-void B_init();
-
-void B_input(pkt);
 
 
 /* common defines */
@@ -56,7 +85,17 @@ void B_input(pkt);
 /* when A send a data package to B,
    we do not need to set acknum,
    so we set it to this default number */
-#define DEFAULT_ACK 111
+#define DEFAULT_ACK 0x0F
+
+#define WINDOW_SIZE 7
+
+#define N WINDOW_SIZE
+
+std::queue<msg> A_buffer, B_buffer;
+pkt A_window[WINDOW_SIZE], B_window[WINDOW_SIZE];
+
+
+rtp_layer_gbn_t A_rtp, B_rtp;
 
 /* current expected seq for B */
 int B_seqnum = 0;
@@ -67,9 +106,6 @@ int A_to_layer3 = 0;
 int B_from_layer3 = 0;
 int B_to_layer5 = 0;
 
-/* defines for sender */
-/* define window size */
-#define N 10
 int base = 0;
 int nextseq = 0;
 /* ring buffer for all packets in window */
@@ -130,70 +166,8 @@ struct node *pop_msg() {
 	return p;
 }
 
-/* common tools */
-/*This is the implementation of checksum. Data packets and ACK packets use the same method. */
-/*
- * There will be no carry flow.
- * seqnum < 1000;
- * acknum < 1000;
- * each payload < 255;
- * so the maximum of checksum < 1000 + 1000 + 20*255 < MAX_INT
- * Why add seqnum and acknum?
-Because checksum is used to make sure the packet is correct, not corrupted.
-Seqnum and acknum may also be corrupted, so we need to add seqnum and acknum.
-
- * About the check sum:
- * There is no perfect method for check sum, only suitable method.
- * In this assignment, we only need to add all of them as it is simple and it works well.
-*/
-
-int calc_checksum(struct pkt *p) {
-	int i;
-	int checksum = 0; /*First init to Zero*/
-	if (p == NULL) {
-		return checksum;
-	}
-/*Add all the characters in payload*/
-	for (i = 0; i < 20; i++) {
-		checksum += (unsigned char) p->payload[i];
-	}
-	/*add the seqnum*/
-	checksum += p->seqnum;
-	/*add the acknum*/
-	checksum += p->acknum;
-/*Then we get the final checksum.*/
-	return checksum;
-}
-
-void Debug_Log(int AorB, char *msg, struct pkt *p, struct msg *m) {
-	char ch = (AorB == A) ? 'A' : 'B';
-	if (AorB == A) {
-		if (p != NULL) {
-			printf("[%c] %s. Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
-			       base, nextseq, p->seqnum, p->acknum, p->checksum, p->payload[0]);
-		} else if (m != NULL) {
-			printf("[%c] %s. Window[%d,%d) Message[data=%c..]\n", ch, msg, base, nextseq, m->data[0]);
-		} else {
-			printf("[%c] %s.Window[%d,%d)\n", ch, msg, base, nextseq);
-		}
-	} else {
-		if (p != NULL) {
-			printf("[%c] %s. Expected[%d] Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
-			       B_seqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
-		} else if (m != NULL) {
-			printf("[%c] %s. Expected[%d] Message[data=%c..]\n", ch, msg, B_seqnum, m->data[0]);
-		} else {
-			printf("[%c] %s.Expected[%d]\n", ch, msg, B_seqnum);
-		}
-	}
-}
-
-/* helper functions for the window */
-int window_isfull() {
-	if (nextseq >= base + N)
-		return 1;
-	else
-		return 0;
+bool window_isfull() {
+	return nextseq >= base + N;
 }
 
 struct pkt *get_free_packet() {
@@ -201,7 +175,7 @@ struct pkt *get_free_packet() {
 
 	/* check is window full */
 	if (nextseq - base >= N) {
-		Debug_Log(A, "Alloc packet failed. The window is full already", NULL, NULL);
+		printLog(A, const_cast<char *>("Alloc packet failed.The window is full already"), NULL, NULL);
 		return NULL;
 	}
 
@@ -214,7 +188,7 @@ struct pkt *get_free_packet() {
 struct pkt *get_packet(int seqnum) {
 	int cur_index = 0;
 	if (seqnum < base || seqnum >= nextseq) {
-		Debug_Log(A, "Seqnum is not within the window", NULL, NULL);
+		printLog(A, const_cast<char *>("Seqnum is not within the window"), NULL, NULL);
 		return NULL;
 	}
 
@@ -248,12 +222,10 @@ void free_packets(int acknum) {
 /* called from layer 5, passed the data to be sent to other side */
 
 /* Every time there is a new packet come,
- * a) we append this packet at the end of the extra buffer.
- * b) Then we check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
- * c) If the window is not full, we retrieve one packet at the beginning of the extra buffer, and process it.
- */
+ * a) we append this packet at the end of the extra buffer.* b) Then we check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
+ * c) If the window is not full, we retrieve one packet at the beginning of the extra buffer, and process it.*/
 void A_output(struct msg message) {
-	printf("================================ Inside A_output===================================\n");
+//	printf("================================ Inside A_output===================================\n");
 	int i;
 	int checksum = 0;
 	struct pkt *p = NULL;
@@ -266,7 +238,7 @@ void A_output(struct msg message) {
 /* If the last packet have not been ACKed, just drop this message */
 /*Step (b)*/
 	if (window_isfull()) {
-		Debug_Log(A, "Window is full already, save message to extra buffer", NULL, &message);
+		printLog(A, const_cast<char *>("Window is full already, save message to extra buffer"), NULL, &message);
 		return;
 	}
 
@@ -280,11 +252,11 @@ void A_output(struct msg message) {
 /* get a free packet from the buf */
 	p = get_free_packet();
 	if (p == NULL) {
-		Debug_Log(A, "BUG! The window is full already", NULL, &message);
+		printLog(A, const_cast<char *>("BUG! The window is full already"), NULL, &message);
 		return;
 	}
 	++A_from_layer5;
-	Debug_Log(A, "Receive an message from layer5", NULL, &message);
+	printLog(A, const_cast<char *>("Receive an message from layer5"), NULL, &message);
 /* copy data from msg to pkt */
 	for (i = 0; i < 20; i++) {
 		p->payload[i] = n->message.data[i];
@@ -293,34 +265,29 @@ void A_output(struct msg message) {
 	free(n);
 
 /* set current seqnum */
-	p->
-			seqnum = nextseq;
+	p->seqnum = nextseq;
 /* we are send package, do not need to set acknum */
-	p->
-			acknum = DEFAULT_ACK;
+	p->acknum = DEFAULT_ACK;
 
 /* calculate check sum including seqnum and acknum */
 	checksum = calc_checksum(p);
 /* set check sum */
-	p->
-			checksum = checksum;
+	p->checksum = checksum;
 
 /* send pkg to layer 3 */
 	tolayer3(A, *p);
-	++
-			A_to_layer3;
+	++A_to_layer3;
 
 /* we only start the timer for the oldest packet */
 	if (base == nextseq) {
 		starttimer(A, TIMEOUT);
 	}
 
-	++
-			nextseq;
+	++nextseq;
 
-	Debug_Log(A, "Send packet to layer3", p, &message);
+	printLog(A, const_cast<char *>("Send packet to layer3"), p, &message);
 
-	printf("================================ Outside A_output===================================\n");
+//	printf("================================ Outside A_output===================================\n");
 }
 
 void B_output(struct msg message)  /* need be completed only for extra credit */
@@ -329,29 +296,26 @@ void B_output(struct msg message)  /* need be completed only for extra credit */
 
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet) {
-	printf("================================ Inside A_input===================================\n");
-	Debug_Log(A, "Receive ACK packet from layer3", &packet, NULL);
+//	printf("================================ Inside A_input===================================\n");
+	printLog(A, const_cast<char *>("Receive ACK packet from layer3"), &packet, NULL);
 
 /* check checksum, if corrupted, do nothing */
-	if (packet.checksum !=
-	    calc_checksum(&packet)
-			) {
-		Debug_Log(A, "ACK packet is corrupted", &packet, NULL);
+	if (packet.checksum != calc_checksum(&packet)) {
+		printLog(A, const_cast<char *>("ACK packet is corrupted"), &packet, NULL);
 		return;
 	}
 
 /* Duplicate ACKs, do nothing */
 	if (packet.acknum < base) {
-		Debug_Log(A, "Receive duplicate ACK", &packet, NULL);
+		printLog(A, const_cast<char *>("Receive duplicate ACK"), &packet, NULL);
 		return;
 	} else if (packet.acknum >= nextseq) {
-		Debug_Log(A, "BUG: receive ACK of future packets", &packet, NULL);
+		printLog(A, const_cast<char *>("BUG: receive ACK of future packets"), &packet, NULL);
 		return;
 	}
 
 /* go to the next seq, and stop the timer */
-	free_packets(packet
-			             .acknum);
+	free_packets(packet.acknum);
 
 /* stop timer of the oldest packet, and if there
    is still some packets on network, we need start
@@ -361,20 +325,20 @@ void A_input(struct pkt packet) {
 		starttimer(A, TIMEOUT);
 	}
 
-	Debug_Log(A, "ACK packet process successfully accomplished!!", &packet, NULL);
-	printf("================================ Outside A_input===================================\n");
+	printLog(A, const_cast<char *>("ACK packet process successfully accomplished!!"), &packet, NULL);
+//	printf("================================ Outside A_input===================================\n");
 }
 
 /* called when A's timer goes off */
 void A_timerinterrupt() {
 	int i;
-	Debug_Log(A, "Time interrupt occur", NULL, NULL);
+	printLog(A, const_cast<char *>("Time interrupt occur"), NULL, NULL);
 	/* if current package no finished, we resend it */
 	for (i = base; i < nextseq; ++i) {
 		struct pkt *p = get_packet(i);
 		tolayer3(A, *p);
 		++A_to_layer3;
-		Debug_Log(A, "Timeout! Send out the package again", p, NULL);
+		printLog(A, const_cast<char *>("Timeout! Send out the package again"), p, NULL);
 	}
 
 	/* If there is still some packets, start the timer again */
@@ -384,7 +348,7 @@ void A_timerinterrupt() {
 }
 
 /* the following routine will be called once (only) before any other */
-/* entity A routines are called. You can use it to do any initialization */
+/* entity A routines are called.You can use it to do any initialization */
 void A_init() {
 }
 
@@ -394,46 +358,40 @@ void A_init() {
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 
 void B_input(struct pkt packet) {
-	printf("================================ Inside B_input===================================\n");
-	Debug_Log(B, "Receive a packet from layer3", &packet, NULL);
+//	printf("================================ Inside B_input===================================\n");
+	printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
 	++B_from_layer3;
 
 /* check checksum, if corrupted, just drop the package */
-	if (packet.checksum != calc_checksum(&packet)
-			) {
-		Debug_Log(B, "Packet is corrupted", &packet, NULL);
+	if (packet.checksum != calc_checksum(&packet)) {
+		printLog(B, const_cast<char *>("Packet is corrupted"), &packet, NULL);
 		return;
 	}
 
 /* normal package, deliver data to layer5 */
 	if (packet.seqnum == B_seqnum) {
-		++
-				B_seqnum;
+		++B_seqnum;
 		tolayer5(B, packet.payload);
-		++
-				B_to_layer5;
-		Debug_Log(B, "Send packet to layer5", &packet, NULL);
+		++B_to_layer5;
+		printLog(B, const_cast<char *>("Send packet to layer5"), &packet, NULL);
 	}
-/* duplicate package, do not deliver data again.
-   just resend the latest ACK again */
+/* duplicate package, do not deliver data again.just resend the latest ACK again */
 	else if (packet.seqnum < B_seqnum) {
-		Debug_Log(B, "Duplicated packet detected", &packet, NULL);
+		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
 	}
 /* disorder packet, discard and resend the latest ACK again */
 	else {
-		Debug_Log(B, "Disordered packet received", &packet, NULL);
+		printLog(B, const_cast<char *>("Disordered packet received"), &packet, NULL);
 	}
 
 /* send back ack */
 	if (B_seqnum - 1 >= 0) {
-		packet.
-				acknum = B_seqnum - 1;    /* resend the latest ACK */
-		packet.
-				checksum = calc_checksum(&packet);
+		packet.acknum = B_seqnum - 1;    /* resend the latest ACK */
+		packet.checksum = calc_checksum(&packet);
 		tolayer3(B, packet);
-		Debug_Log(B, "Send ACK packet to layer3", &packet, NULL);
+		printLog(B, const_cast<char *>("Send ACK packet to layer3"), &packet, NULL);
 	}
-	printf("================================ Outside B_input(packet) =========================\n");
+//	printf("================================ Outside B_input(packet) =========================\n");
 }
 
 /* called when B's timer goes off */
@@ -441,10 +399,53 @@ void B_timerinterrupt() {
 }
 
 /* the following rouytine will be called once (only) before any other */
-/* entity B routines are called. You can use it to do any initialization */
+/* entity B routines are called.You can use it to do any initialization */
 void B_init() {
 }
 
+//===================== Utils =====================
+int calc_checksum(const pkt *p) {
+	calc_checksum(p->seqnum, p->acknum, p->payload);
+}
+
+
+pkt make_pkt(msg message, int seqNum, int ackNum) {
+	pkt packet = {seqNum, ackNum, 0, ""};
+	strncpy(packet.payload, message.data, MSG_LEN);
+	packet.checksum = calc_checksum(&packet);
+	return packet;
+}
+
+pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum) {
+	pkt packet = {seqNum, ackNum, 0, ""};
+	strncpy(packet.payload, data, MSG_LEN);
+	packet.checksum = calc_checksum(&packet);
+	return packet;
+}
+
+//===================== Log Files ==================
+void writeLog(FILE *fp, int AorB, char *msg, const struct pkt *p, struct msg *m, float time) {
+	char ch = (AorB == A) ? 'A' : 'B';
+	if (AorB == A) {
+		if (p != NULL) {
+			fprintf(fp, "[%c] @%f %s.Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time, msg,
+			        base, nextseq, p->seqnum, p->acknum, p->checksum, p->payload);
+		} else if (m != NULL) {
+			fprintf(fp, "[%c] @%f %s.Window[%d,%d) Message[data=%s..]\n", ch, time, msg, base, nextseq, m->data);
+		} else {
+			fprintf(fp, "[%c] @%f %s.Window[%d,%d)\n", ch, time, msg, base, nextseq);
+		}
+	} else {
+		if (p != NULL) {
+			fprintf(fp, "[%c] @%f %s.Expected[%d] Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time, msg,
+			        B_seqnum, p->seqnum, p->acknum, p->checksum, p->payload);
+		} else if (m != NULL) {
+			fprintf(fp, "[%c] @%f %s.Expected[%d] Message[data=%s..]\n", ch, time, msg, B_seqnum, m->data);
+		} else {
+			fprintf(fp, "[%c] @%f %s.Expected[%d]\n", ch, time, msg, B_seqnum);
+		}
+	}
+}
 
 void printStat() {
 	printf("#Sent Packets from Layer5-to   A: %d\n", A_from_layer5);

@@ -7,7 +7,7 @@ add_executable(ALTERNATING-BIT-PROTOCOL
         rdt_abp.cpp Utils.h ABP.h)
 
 add_executable(GO-BACK-N
-        rdt_abp.cpp Utils.h GBN.h)
+        rdt_gbn.cpp Utils.h GBN.h)
 
 add_executable(GO-BACK-N-COPIED
         gbn.c)
