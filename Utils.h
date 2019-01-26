@@ -8,11 +8,17 @@
 #define DEBUG_ABP
 #define DEBUG_GBN
 
-#define DEBUG_ABP_NMSG 10
-#define DEBUG_ABP_PROB_LOSS 0.1
-#define DEBUG_ABP_PROB_CORP 0.0
+#define DEBUG_ABP_NMSG 1000
+#define DEBUG_ABP_PROB_LOSS 0.2//0.05
+#define DEBUG_ABP_PROB_CORP 0.3//0.45
 #define DEBUG_ABP_TIME 100
 #define DEBUG_ABP_TRACE 0
+
+#define DEBUG_GBN_NMSG 1000
+#define DEBUG_GBN_PROB_LOSS 0.2//0.05
+#define DEBUG_GBN_PROB_CORP 0.3//0.45
+#define DEBUG_GBN_TIME 100
+#define DEBUG_GBN_TRACE 0
 
 //#include <cstdio>
 
@@ -27,14 +33,16 @@ struct pkt;
 #define ACK_ABP_DEFAULT 0x0F
 #define SEQ_ABP_DEFAULT 0x0F
 
-enum sender_state {WAITING_FOR_PKT,WAITING_FOR_ACK};
+enum sender_state {
+	WAITING_FOR_PKT, WAITING_FOR_ACK
+};
 
-struct rtp_layer_t{
+struct rtp_layer_t {
 	int seqnum;/// current expected seq
 	sender_state senderState;
 	int cnt_layer3;
 	int cnt_layer5;
-	pkt* buffer;
+	pkt *buffer;
 };
 ///=============================================================
 
@@ -65,7 +73,8 @@ int calc_checksum(int seqnum, int acknum, const char payload[MSG_LEN]) {
 	return checksum;
 }
 
-void printLog(char chan, char *msg, int seqnum, int acknum, int checksum,const char payload[MSG_LEN], const char *data) {
+void
+printLog(char chan, char *msg, int seqnum, int acknum, int checksum, const char payload[MSG_LEN], const char *data) {
 	static FILE *fp = fopen("out.log", "w");
 
 	fprintf(fp, "[%c] %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", chan,
