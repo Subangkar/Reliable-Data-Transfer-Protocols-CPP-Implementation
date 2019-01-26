@@ -606,11 +606,11 @@ void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
 	char ch = (AorB == A) ? 'A' : 'B';
 	if (p != NULL) {
 //        printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
-		fprintf(fp, "[%c] @%f %s. Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, time,
-		        msg, p->seqnum, p->acknum, p->checksum, p->payload[0]);
+		fprintf(fp, "[%c] @%f %s. Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time,
+		        msg, p->seqnum, p->acknum, p->checksum, p->payload);
 	} else if (m != NULL) {
 //	    printLog(ch,msg,p->nextseqnum,p->acknum,p->checksum,p->payload,m->data);
-		fprintf(fp, "[%c] @%f %s. Message[data=%c..]\n", ch, time, msg, m->data[0]);
+		fprintf(fp, "[%c] @%f %s. Message[data=%s..]\n", ch, time, msg, m->data);
 	} else {
 		fprintf(fp, "[%c] @%f %s.\n", ch, time, msg);
 	}

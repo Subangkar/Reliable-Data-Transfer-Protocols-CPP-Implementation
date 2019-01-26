@@ -75,6 +75,8 @@ int calc_checksum(const pkt *p);
 
 #define WINDOW_SIZE 7
 
+#define N WINDOW_SIZE
+
 std::queue<msg> A_buffer, B_buffer;
 pkt A_window[WINDOW_SIZE], B_window[WINDOW_SIZE];
 
@@ -282,11 +284,11 @@ void init() /* initialize the simulator */
 
 #ifdef DEBUG_GBN
 //    freopen("in.log","r",stdin);
-	nsimmax = DEBUG_ABP_NMSG;
-	lossprob = DEBUG_ABP_PROB_LOSS;
-	corruptprob = DEBUG_ABP_PROB_CORP;
-	lambda = DEBUG_ABP_TIME;
-	TRACE = DEBUG_ABP_TRACE;
+	nsimmax = DEBUG_GBN_NMSG;
+	lossprob = DEBUG_GBN_PROB_LOSS;
+	corruptprob = DEBUG_GBN_PROB_CORP;
+	lambda = DEBUG_GBN_TIME;
+	TRACE = DEBUG_GBN_TRACE;
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: %d\n", nsimmax);
 	printf("Enter  packet loss probability [enter 0.0 for no loss]: %f\n", lossprob);
@@ -577,7 +579,7 @@ void Debug_Log(int AorB, char *msg, const struct pkt *p, struct msg *m) {
 			printf("[%c] %s. Window[%d,%d) Packet[seq=%d,ack=%d,check=%d,data=%c..]\n", ch, msg,
 			       A_rtp.base, A_rtp.nextseqnum, p->seqnum, p->acknum, p->checksum, p->payload[0]);
 		} else if (m != NULL) {
-			printf("[%c] %s. Window[%d,%d) Message[data=%c..]\n", ch, msg, A_rtp.base, A_rtp.nextseqnum, m->data[0]);
+			printf("[%c] %s. Window[%d,%d) Message[data=%s..]\n", ch, msg, A_rtp.base, A_rtp.nextseqnum, m->data);
 		} else {
 			printf("[%c] %s.Window[%d,%d)\n", ch, msg, A_rtp.base, A_rtp.nextseqnum);
 		}
