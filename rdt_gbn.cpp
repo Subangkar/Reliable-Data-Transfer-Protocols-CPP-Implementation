@@ -83,6 +83,12 @@ pkt A_window[WINDOW_SIZE], B_window[WINDOW_SIZE];
 
 rtp_layer_gbn_t A_rtp, B_rtp;
 
+int A_from_layer5 = 0;
+int A_to_layer3 = 0;
+int B_from_layer3 = 0;
+int B_to_layer5 = 0;
+
+
 ///============================ Timer Functions ============================
 #define MAX_TIMERS (WINDOW_SIZE+1)
 bool hasTimerStarted;

@@ -5,16 +5,26 @@
 #ifndef RDT_UTILS_H
 #define RDT_UTILS_H
 
+//#define ABP_SIM
+#define GBN_SIM
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <cstdio>
+
+#include "Utils.h"
+
 #define DEBUG_ABP
 #define DEBUG_GBN
 
 #define DEBUG_ABP_NMSG 100
 #define DEBUG_ABP_PROB_LOSS 0.2//0.05
-#define DEBUG_ABP_PROB_CORP 0.3//0.45
-#define DEBUG_ABP_TIME 100
+#define DEBUG_ABP_PROB_CORP 0.0//0.45
+#define DEBUG_ABP_TIME 1000
 #define DEBUG_ABP_TRACE 0
 
-#define DEBUG_GBN_NMSG 1000
+#define DEBUG_GBN_NMSG 100
 #define DEBUG_GBN_PROB_LOSS 0.2//0.05
 #define DEBUG_GBN_PROB_CORP 0.3//0.45
 #define DEBUG_GBN_TIME 100
