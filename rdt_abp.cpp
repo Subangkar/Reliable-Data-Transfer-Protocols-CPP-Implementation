@@ -418,8 +418,8 @@ void tolayer5(int AorB, char datasent[20]) {
 /******************* DEBUG ***********************/
 void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
 	static bool opened = false;
-	if (!opened) opened = true, fclose(fopen("out.log", "w"));
-	FILE *fp = fopen("out.log", "a");
+	if (!opened) opened = true, fclose(fopen("output_abp.log", "w"));
+	FILE *fp = fopen("output_abp.log", "a");
 	writeLog(fp, AorB, msg, p, m, time);
 	fclose(fp);
 }

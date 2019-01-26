@@ -26,15 +26,13 @@
 ///======================= Data Defn ===================
 
 #define MSG_LEN 20
-#define BUF_SIZE 7
 
-//struct msg;
-//struct pkt;
 
 #define ACK_ABP_DEFAULT 0x0F
 #define SEQ_ABP_DEFAULT 0x0F
 #define ACK_GBN_DEFAULT 0x0F
-#define SEQ_GBN_DEFAULT 0x0F
+
+int nDroppedMessages;
 
 ///=============================================================
 

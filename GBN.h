@@ -65,7 +65,7 @@ void clearTimerFlag(int AorB);
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
-
+#define MSG 3
 
 void A_output(msg);
 
@@ -73,9 +73,9 @@ void A_output(msg);
 #define   A    0
 #define   B    1
 
-#define TIMEOUT 20.0
+#define TIMEOUT 15.0
 
-#define EXTRA_BUFFER_SIZE 20
+#define EXTRA_BUFFER_SIZE 50
 #define SEQ_NUM_SIZE 8
 #define WINDOW_SIZE 7
 
@@ -86,15 +86,17 @@ pkt A_window[SEQ_NUM_SIZE];
 rtp_layer_gbn_t A_rtp, B_rtp;
 
 
+bool windowIsEmpty(const rtp_layer_gbn_t &rtp_layer) {
+	return rtp_layer.nextseqnum == rtp_layer.base;
+}
+
 bool windowIsFull(const rtp_layer_gbn_t &rtp_layer) {
-//	return nextseq >= base + N;
 	return rtp_layer.nextseqnum == ((rtp_layer.base + WINDOW_SIZE) % SEQ_NUM_SIZE);
 }
 
 void free_packets(int acknum) {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
-//	if (acknum < rtp_layer.base || acknum >= rtp_layer.nextseqnum)return;
-	if (acknum == rtp_layer.nextseqnum)return;//invalid ack num
+	if (acknum == rtp_layer.nextseqnum)return;// ack num out of window
 
 	int count = (acknum - rtp_layer.base + 1 + SEQ_NUM_SIZE) % SEQ_NUM_SIZE;
 	rtp_layer.base = (acknum + 1) % SEQ_NUM_SIZE;
@@ -135,21 +137,18 @@ void A_output(struct msg message) {
 
 	printLog(A, const_cast<char *>("Receive an message from layer5"), NULL, &message);
 	if (rtp_layer.msgbuffer->size() >= EXTRA_BUFFER_SIZE) {
+		++nDroppedMessages;
 		printLog(A, const_cast<char *>("Extra Buffer full. Dropping Message!!!"), nullptr, &message);
 		return;
 	}
-/*Step (a)*/
 	rtp_layer.msgbuffer->push(message);
 
-/* If the last packet have not been ACKed, just drop this message */
-/*Step (b)*/
 /// if windows is full just push then
 	if (windowIsFull(A_rtp)) {
 		printLog(A, const_cast<char *>("Window is full already, save message to extra buffer"), NULL, &message);
 		return;
 	}
 /// window not full hence queue has only one element
-/* Step(c)*/
 	if (rtp_layer.msgbuffer->empty()) { // Error
 		perror("No message need to process\n");
 		return;
@@ -185,16 +184,12 @@ void A_input(struct pkt packet) {
 	}
 
 	/* Duplicate ACK: NACK -> resend all */
-	if (packet.acknum == ((rtp_layer.base + SEQ_NUM_SIZE - 1) % SEQ_NUM_SIZE)) {
+	if (packet.acknum == ((rtp_layer.base + WINDOW_SIZE) % SEQ_NUM_SIZE)) {
 		printLog(A, const_cast<char *>("Received duplicate ACK"), &packet, NULL);
 		resetTimers(A);
 		retransmitCurrentWindow(A_rtp);
 		return;
 	}
-//	else if (packet.acknum >= nextseq) {
-//		printLog(A, const_cast<char *>("BUG: receive ACK of future packets"), &packet, NULL);
-//		return;
-//	}
 
 	/* go to the next base,seq and stop the timer */
 	free_packets(packet.acknum);
@@ -207,7 +202,7 @@ void A_timerinterrupt() {
 	clearTimerFlag(A);
 	resetTimers(A);
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
-	if (rtp_layer.base == rtp_layer.nextseqnum) {
+	if (windowIsEmpty(rtp_layer)) {
 		perror(">> Problem: timer interrupt occurred with empty window\n");
 	}
 	printLog(A, const_cast<char *>("Timer interrupt occurred"), NULL, NULL);
@@ -233,10 +228,10 @@ void B_input(struct pkt packet) {
 	printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
 	++rtp_layer.cnt_layer3;
 
-/* check checksum, if corrupted, just drop the package */
+	/* if corrupted, just drop the package */
 	if (packet.checksum != calc_checksum(&packet)) {
 		printLog(B, const_cast<char *>("Packet is corrupted"), &packet, NULL);
-		return;
+//		return;
 	}
 
 	/* normal packet, deliver data to layer5 */
@@ -246,22 +241,20 @@ void B_input(struct pkt packet) {
 		++rtp_layer.cnt_layer5;
 		printLog(B, const_cast<char *>("Send packet to layer5"), &packet, NULL);
 	}
-/* duplicate package, do not deliver data again.just resend the latest ACK again */
+		/* duplicate packet, resend the latest ACK again */
 	else if (packet.seqnum < rtp_layer.nextseqnum) {
 		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
 	}
-/* disorder packet, discard and resend the latest ACK again */
+		/* disorder packet, resend the latest ACK again */
 	else {
 		printLog(B, const_cast<char *>("Disordered packet received"), &packet, NULL);
 	}
 
 	/* send back ACK with the last received seqnum */
-//	if (rtp_layer.nextseqnum - 1 >= 0) {
 	packet.acknum = (rtp_layer.nextseqnum + SEQ_NUM_SIZE - 1) % SEQ_NUM_SIZE;    /* resend the latest ACK */
 	packet.checksum = calc_checksum(&packet);
 	tolayer3(B, packet);
 	printLog(B, const_cast<char *>("Send ACK packet to layer3"), &packet, NULL);
-//	}
 }
 
 /* called when B's timer goes off */
@@ -320,14 +313,11 @@ void writeLog(FILE *fp, int AorB, char *msg, const struct pkt *p, struct msg *m,
 }
 
 void printStat() {
-//	printf("#Sent Packets from Layer5-to   A: %d\n", A_from_layer5);
-//	printf("#Sent Packets to   Layer3-from A: %d\n", A_to_layer3);
-	printf("#Sent Packets from Layer5-to   A: %d\n", A_rtp.cnt_layer5);
-	printf("#Sent Packets to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
-	printf("#Sent Packets from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
-	printf("#Sent Packets to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
-//	printf("#Sent Packets from Layer3-to   B: %d\n", B_from_layer3);
-//	printf("#Sent Packets to   Layer5-from B: %d\n", B_to_layer5);
+	printf("#Sent Messages from Layer5-to   A: %d\n", A_rtp.cnt_layer5);
+	printf("#Sent Messages to   Layer3-from A: %d\n", A_rtp.cnt_layer5 - nDroppedMessages);
+	printf("#Sent Packets  to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
+	printf("#Sent Packets  from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
+	printf("#Sent Messages to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
 }
 
 #endif //RDT_GBN_H

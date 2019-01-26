@@ -83,6 +83,7 @@ void A_output(struct msg message) {
 
 	/* If the last packet have not been ACKed, just drop this message */
 	if (rtp_layer.senderState != WAITING_FOR_PKT) {
+		++nDroppedMessages;
 		printLog(A, const_cast<char *>("Drop this message, last message have not finished"), NULL, &message);
 		return;
 	}
@@ -161,7 +162,7 @@ void B_input(struct pkt packet) {
 
 	printLog(B, const_cast<char *>("Receive a packet from layer3"), &packet, NULL);
 	++rtp_layer.cnt_layer3;
-	pkt ack = make_pkt(packet.payload, SEQ_ABP_DEFAULT, packet.seqnum);// send packet seq no as it is received
+	int acknum = rtp_layer.seqnum;
 
 	/* normal packet, deliver data to layer5 */
 	if (packet.seqnum == rtp_layer.seqnum && packet.checksum == calc_checksum(&packet)) {
@@ -174,12 +175,18 @@ void B_input(struct pkt packet) {
 		/* check checksum, if corrupted*/
 	else if (packet.checksum != calc_checksum(&packet)) {
 		printLog(B, const_cast<char *>("Data Packet is corrupted"), &packet, NULL);
+		acknum = !rtp_layer.seqnum;
+		pkt ack = make_pkt(packet.payload, packet.seqnum, acknum);// send packet seq no as it is received
+		tolayer3(B, ack); // nextseqnum doesn't have any meaning here
+		printLog(B, const_cast<char *>("Send NACK packet to layer3"), &ack, NULL);
+		return;
 	}
 
 		/* duplicate pkt resends the ACK*/
 	else if (packet.seqnum != rtp_layer.seqnum) {
 		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
 	}
+	pkt ack = make_pkt(packet.payload, packet.seqnum, acknum);// send packet seq no as it is received
 	tolayer3(B, ack); // nextseqnum doesn't have any meaning here
 	printLog(B, const_cast<char *>("Send ACK packet to layer3"), &ack, NULL);
 }
@@ -216,7 +223,7 @@ pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum) {
 }
 
 
-void writeLog(FILE* fp,int AorB, char *msg, const struct pkt *p, struct msg *m, float time) {
+void writeLog(FILE *fp, int AorB, char *msg, const struct pkt *p, struct msg *m, float time) {
 	char ch = (AorB == A) ? 'A' : 'B';
 	if (p != NULL) {
 		fprintf(fp, "[%c] @%f %s. Packet[seq=%d,ack=%d,check=%d,data=%s..]\n", ch, time,
@@ -230,10 +237,11 @@ void writeLog(FILE* fp,int AorB, char *msg, const struct pkt *p, struct msg *m, 
 
 
 void printStat() {
-	printf("#Sent Packets from Layer5-to   A: %d\n", A_rtp.cnt_layer5);
-	printf("#Sent Packets to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
-	printf("#Sent Packets from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
-	printf("#Sent Packets to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
+	printf("#Sent Messages from Layer5-to   A: %d\n", A_rtp.cnt_layer5);
+	printf("#Sent Messages to   Layer3-from A: %d\n", A_rtp.cnt_layer5 - nDroppedMessages);
+	printf("#Sent Packets  to   Layer3-from A: %d\n", A_rtp.cnt_layer3);
+	printf("#Sent Packets  from Layer3-to   B: %d\n", B_rtp.cnt_layer3);
+	printf("#Sent Messages to   Layer5-from B: %d\n", B_rtp.cnt_layer5);
 }
 
 #endif //RDT_ABP_H
