@@ -7,8 +7,7 @@
 
 #ifndef RDT_GBN_H
 #define RDT_GBN_H
-
-#define FILE_NAME "output_gbn.log"
+#define FILE_NAME "output_gbn_2.log"
 
 #define BIDIRECTIONAL 0    /* change to 1 if you're doing extra credit */
 /* and write a routine called B_output */
@@ -76,7 +75,7 @@ void A_output(msg);
 #define   A    0
 #define   B    1
 
-#define TIMEOUT 15.0
+#define TIMEOUT 35.0
 
 #define EXTRA_BUFFER_SIZE 50
 #define SEQ_NUM_SIZE 8
@@ -225,6 +224,8 @@ void A_init() {
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
+bool waitCumulativeAck = false;
+#define TIMEOUT_ACK 10
 
 void B_input(struct pkt packet) {
 	rtp_layer_gbn_t &rtp_layer = B_rtp;
@@ -243,6 +244,9 @@ void B_input(struct pkt packet) {
 		rtp_layer.nextseqnum = (rtp_layer.nextseqnum + 1) % SEQ_NUM_SIZE;
 		++rtp_layer.cnt_layer5;
 		printLog(B, const_cast<char *>("Send packet to layer5"), &packet, NULL);
+		if (!waitCumulativeAck)startTimer(B, 0, TIMEOUT_ACK);
+		waitCumulativeAck = true;
+		return;
 	}
 		/* duplicate packet, resend the latest ACK again */
 	else if (packet.seqnum < rtp_layer.nextseqnum) {
@@ -254,6 +258,8 @@ void B_input(struct pkt packet) {
 	}
 
 	/* send back ACK with the last received seqnum */
+	if (waitCumulativeAck) stopTimer(B);
+	waitCumulativeAck = false;
 	packet.acknum = (rtp_layer.nextseqnum + SEQ_NUM_SIZE - 1) % SEQ_NUM_SIZE;    /* resend the latest ACK */
 	packet.checksum = calc_checksum(&packet);
 	tolayer3(B, packet);
@@ -262,6 +268,14 @@ void B_input(struct pkt packet) {
 
 /* called when B's timer goes off */
 void B_timerinterrupt() {
+	if (!waitCumulativeAck)
+		return;
+	printLog(B, const_cast<char *>("Timer Interrupt occurred @ B !!!"), nullptr, nullptr);
+	pkt packet = make_pkt("Cumulative ACK", 0x0F,
+	                      (B_rtp.nextseqnum + SEQ_NUM_SIZE - 1) % SEQ_NUM_SIZE);    /* resend the latest ACK */
+	waitCumulativeAck = false;
+	tolayer3(B, packet);
+	printLog(B, const_cast<char *>("Send ACK packet to layer3"), &packet, NULL);
 }
 
 /* the following rouytine will be called once (only) before any other */
