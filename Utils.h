@@ -5,13 +5,12 @@
 #ifndef RDT_UTILS_H
 #define RDT_UTILS_H
 
-//#define ABP_SIM
-//#define GBN_SIM
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <cstdio>
+
 
 //#define DEBUG
 //#define DEBUG_ABP
@@ -32,7 +31,7 @@
 #define SEQ_ABP_DEFAULT 0x0F
 #define ACK_GBN_DEFAULT 0x0F
 
-int nDroppedMessages;
+int nDroppedMessages;// keeps stat of number of dropped messages from layer 5
 
 ///=============================================================
 

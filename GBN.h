@@ -66,8 +66,6 @@ void clearTimerFlag(int AorB);
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
-#define MSG 3
-
 void A_output(msg);
 
 
@@ -114,7 +112,7 @@ void free_packets(int acknum) {
 	}
 }
 
-/// also forwards nextseqnum
+/* adds a packet at last of the window and also forwards nextseqnum */
 void addPacketToWindow(rtp_layer_gbn_t &rtp_layer, pkt &packet) {
 	rtp_layer.windowbuffer[rtp_layer.nextseqnum] = packet;
 	rtp_layer.nextseqnum = (rtp_layer.nextseqnum + 1) % SEQ_NUM_SIZE;
@@ -131,9 +129,9 @@ void retransmitCurrentWindow(rtp_layer_gbn_t &rtp_layer) {
 /* called from layer 5, passed the data to be sent to other side */
 
 /* Every time there is a new packet come,
- * a) we append this packet at the end of the extra buffer.
- * b) Then we check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
- * c) If the window is not full, we retrieve one packet at the beginning of the extra buffer, and process it.*/
+ * a) append this packet at the end of the extra buffer.
+ * b) check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
+ * c) If the window is not full, retrieve one packet at the beginning of the extra buffer, and process it.*/
 void A_output(struct msg message) {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
 
@@ -231,17 +229,14 @@ void B_input(struct pkt packet) {
 	if (packet.checksum != calc_checksum(&packet)) {
 		printLog(B, const_cast<char *>("Packet is corrupted"), &packet, NULL);
 //		return;
-	}
-
-	/* normal packet, deliver data to layer5 */
-	else if (packet.seqnum == rtp_layer.nextseqnum) {
+	} else if (packet.seqnum == rtp_layer.nextseqnum) {
+		/* normal packet, deliver data to layer5 */
 		tolayer5(B, packet.payload);
 		rtp_layer.nextseqnum = (rtp_layer.nextseqnum + 1) % SEQ_NUM_SIZE;
 		++rtp_layer.cnt_layer5;
 		printLog(B, const_cast<char *>("Send packet to layer5"), &packet, NULL);
-	}
+	} else {
 		/* duplicate packet, resend the latest ACK again */
-	else {
 		printLog(B, const_cast<char *>("Disordered packet received"), &packet, NULL);
 	}
 

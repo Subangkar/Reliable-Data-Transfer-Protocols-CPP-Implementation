@@ -153,31 +153,31 @@ void init() /* initialize the simulator */
 	float sum, avg;
 	float jimsrand();
 #ifdef DEBUG
-//    freopen("in.log","r",stdin);
-	nsimmax = DEBUG_NMSG;
-	lossprob = DEBUG_PROB_LOSS;
-	corruptprob = DEBUG_PROB_CORP;
-	lambda = DEBUG_TIME;
-	TRACE = DEBUG_TRACE;
-	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
-	printf("Enter the number of messages to simulate: %d\n", nsimmax);
-	printf("Enter  packet loss probability [enter 0.0 for no loss]: %f\n", lossprob);
-	printf("Enter packet corruption probability [0.0 for no corruption]: %f\n", corruptprob);
-	printf("Enter average time between messages from sender's layer5 [ > 0.0]: %f\n", lambda);
-	printf("Enter TRACE: %d\n", TRACE);
+	//    freopen("in.log","r",stdin);
+		nsimmax = DEBUG_NMSG;
+		lossprob = DEBUG_PROB_LOSS;
+		corruptprob = DEBUG_PROB_CORP;
+		lambda = DEBUG_TIME;
+		TRACE = DEBUG_TRACE;
+		printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
+		printf("Enter the number of messages to simulate: %d\n", nsimmax);
+		printf("Enter  packet loss probability [enter 0.0 for no loss]: %f\n", lossprob);
+		printf("Enter packet corruption probability [0.0 for no corruption]: %f\n", corruptprob);
+		printf("Enter average time between messages from sender's layer5 [ > 0.0]: %f\n", lambda);
+		printf("Enter TRACE: %d\n", TRACE);
 #endif
 #ifndef DEBUG
 	printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
 	printf("Enter the number of messages to simulate: ");
-	scanf("%d",&nsimmax);
+	scanf("%d", &nsimmax);
 	printf("Enter  packet loss probability [enter 0.0 for no loss]:");
-	scanf("%f",&lossprob);
+	scanf("%f", &lossprob);
 	printf("Enter packet corruption probability [0.0 for no corruption]:");
-	scanf("%f",&corruptprob);
+	scanf("%f", &corruptprob);
 	printf("Enter average time between messages from sender's layer5 [ > 0.0]:");
-	scanf("%f",&lambda);
+	scanf("%f", &lambda);
 	printf("Enter TRACE:");
-	scanf("%d",&TRACE);
+	scanf("%d", &TRACE);
 #endif
 	srand(9999); /* init random number generator */
 	sum = 0.0;   /* test random number generator for students */
@@ -417,11 +417,11 @@ void tolayer5(int AorB, char datasent[20]) {
 
 /******************* DEBUG ***********************/
 void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
-	static bool opened = false;
-	if (!opened) opened = true, fclose(fopen("output_abp.log", "w"));
-	FILE *fp = fopen("output_abp.log", "a");
-	writeLog(fp, AorB, msg, p, m, time);
-	fclose(fp);
+//	static bool opened = false;
+//	if (!opened) opened = true, fclose(fopen("output_abp.log", "w"));
+//	FILE *fp = fopen("output_abp.log", "a");
+	writeLog(stdout, AorB, msg, p, m, time);
+//	fclose(fp);
 }
 
 

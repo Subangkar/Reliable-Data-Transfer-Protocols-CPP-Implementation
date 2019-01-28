@@ -498,10 +498,10 @@ void clearTimerFlag(int AorB) {
 
 /******************* DEBUG ***********************/
 void printLog(int AorB, char *msg, const struct pkt *p, struct msg *m) {
-	static bool opened = false;
-	if (!opened) opened = true, fclose(fopen("output_gbn.log", "w"));
-	FILE *fp = fopen("output_gbn.log", "a");
-	if (AorB != MSG)writeLog(fp, AorB, msg, p, m, time);
-	else fprintf(fp, "====================================== %s ======================================\n", msg);
-	fclose(fp);
+//	static bool opened = false;
+//	if (!opened) opened = true, fclose(fopen("output_gbn.log", "w"));
+//	FILE *fp = fopen("output_gbn.log", "a");
+	writeLog(stdout, AorB, msg, p, m, time);
+//	else fprintf(fp, "====================================== %s ======================================\n", msg);
+//	fclose(fp);
 }

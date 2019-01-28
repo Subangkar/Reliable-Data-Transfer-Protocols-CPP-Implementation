@@ -32,11 +32,10 @@ enum sender_state {
 };
 
 struct rtp_layer_abp_t {
-	int seqnum;/// current expected seq
-	sender_state senderState;
-	int cnt_layer3;
-	int cnt_layer5;
-	pkt *buffer;
+	int seqnum;// current expected seq
+	sender_state senderState;// sender's current state
+	int cnt_layer3;// for stat
+	int cnt_layer5;// for stat
 };
 
 /********* FUNCTION PROTOTYPES. DEFINED IN THE LATER PART******************/
@@ -145,7 +144,7 @@ void A_timerinterrupt() {
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
 void A_init() {
-	A_rtp = {0, WAITING_FOR_PKT, 0, 0, nullptr};
+	A_rtp = {0, WAITING_FOR_PKT, 0, 0};
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -187,7 +186,7 @@ void B_timerinterrupt(void) {
 /* the following rouytine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 void B_init() {
-	B_rtp = {0, WAITING_FOR_ACK, 0, 0, nullptr};
+	B_rtp = {0, WAITING_FOR_ACK, 0, 0};
 }
 
 
