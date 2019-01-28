@@ -93,7 +93,7 @@ bool windowIsFull(const rtp_layer_gbn_t &rtp_layer) {
 	return rtp_layer.nextseqnum == ((rtp_layer.base + WINDOW_SIZE) % SEQ_NUM_SIZE);
 }
 
-void free_packets(int acknum) {
+void slideWindowForward(int acknum) {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
 	if (acknum == rtp_layer.nextseqnum)return;// ack num out of window
 
@@ -188,7 +188,7 @@ void A_input(struct pkt packet) {
 	}
 
 	/* go to the next base,seq and stop the timer */
-	free_packets(packet.acknum);
+	slideWindowForward(packet.acknum);
 
 	printLog(A, const_cast<char *>("ACK packet processed successfully !!"), &packet, NULL);
 }
