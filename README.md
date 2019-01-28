@@ -2,8 +2,8 @@ Reliable Data Transfer Protocol implementation in C++ using modified ALTERNATING
 FROM VERSION 1.1 of J.F.Kurose as an assignment in Computer Networking Lab in Level-3, Term-2 of BUET.    
   
 In this assignment sender and receiver implemented for two versions of RDT3.0 are implemented for only simplex data transfer:  
- - Alternating-bit protocol
- - Go-Back-N with finite sequence numbers [0,7].  
+ - Alternating-bit protocol (ABP)
+ - Go-Back-N (GBN) with finite sequence numbers [0,7].  
   
   
 Additional Implementation:
