@@ -8,3 +8,6 @@ add_executable(ALTERNATING-BIT-PROTOCOL
 
 add_executable(GO-BACK-N
         rdt_gbn.cpp Utils.h GBN.h)
+
+add_executable(GO-BACK-N-CUMULATIVE-ACK
+        rdt_gbn_cumulative_ack.cpp Utils.h GBN_cumulative_ack.h)
