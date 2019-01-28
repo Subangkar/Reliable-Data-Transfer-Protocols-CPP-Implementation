@@ -29,12 +29,12 @@ struct pkt {
 
 /// base-nextseq-cnt3-cnt5-windBuf-msgBuf
 struct rtp_layer_gbn_t {
-	int base;
-	int nextseqnum;/// current expected seq
-	int cnt_layer3;
-	int cnt_layer5;
-	pkt *windowbuffer;
-	std::queue<msg> *msgbuffer;
+	int base;// current send base
+	int nextseqnum;// current expected seq
+	int cnt_layer3;// kept only for stat
+	int cnt_layer5;// kept only for stat
+	pkt *windowbuffer;// congestion windows buffer
+	std::queue<msg> *msgbuffer;// extra buffer
 };
 
 /********* FUNCTION PROTOTYPES.DEFINED IN THE LATER PART******************/
@@ -53,6 +53,7 @@ pkt make_pkt(msg message, int seqNum, int ackNum = ACK_ABP_DEFAULT);
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 
 ///============================ Timer Functions ============================
+/* Multiple timer implemented in cpp with single timer using following functions */
 
 void startTimer(int AorB, int timerNo, float increment);
 
@@ -73,7 +74,7 @@ void A_output(msg);
 #define   A    0
 #define   B    1
 
-#define TIMEOUT 15.0
+#define TIMEOUT 40.0
 
 #define EXTRA_BUFFER_SIZE 50
 #define SEQ_NUM_SIZE 8
@@ -130,7 +131,8 @@ void retransmitCurrentWindow(rtp_layer_gbn_t &rtp_layer) {
 /* called from layer 5, passed the data to be sent to other side */
 
 /* Every time there is a new packet come,
- * a) we append this packet at the end of the extra buffer.* b) Then we check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
+ * a) we append this packet at the end of the extra buffer.
+ * b) Then we check the window is full or not; If the window is full, we just leave the packet in the extra buffer;
  * c) If the window is not full, we retrieve one packet at the beginning of the extra buffer, and process it.*/
 void A_output(struct msg message) {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
@@ -143,17 +145,13 @@ void A_output(struct msg message) {
 	}
 	rtp_layer.msgbuffer->push(message);
 
-/// if windows is full just push then
+	/// if windows is full then just push
 	if (windowIsFull(A_rtp)) {
 		printLog(A, const_cast<char *>("Window is full already, save message to extra buffer"), NULL, &message);
 		return;
 	}
-/// window not full hence queue has only one element
-	if (rtp_layer.msgbuffer->empty()) { // Error
-		perror("No message need to process\n");
-		return;
-	}
 
+	// if windows is not full then current message is the only message in buffer
 	rtp_layer.msgbuffer->pop();
 
 	++rtp_layer.cnt_layer5;
@@ -161,7 +159,7 @@ void A_output(struct msg message) {
 
 
 	pkt packet = make_pkt(message, rtp_layer.nextseqnum, ACK_GBN_DEFAULT);
-	addPacketToWindow(rtp_layer, packet);
+	addPacketToWindow(rtp_layer, packet);//nextseqnum is updated here
 	tolayer3(A, packet);
 	startTimer(A, rtp_layer.nextseqnum, TIMEOUT);
 	++rtp_layer.cnt_layer3;
@@ -204,6 +202,7 @@ void A_timerinterrupt() {
 	rtp_layer_gbn_t &rtp_layer = A_rtp;
 	if (windowIsEmpty(rtp_layer)) {
 		perror(">> Problem: timer interrupt occurred with empty window\n");
+		return;
 	}
 	printLog(A, const_cast<char *>("Timer interrupt occurred"), NULL, NULL);
 	/* if current packets not ACKed, resend it */
@@ -235,17 +234,13 @@ void B_input(struct pkt packet) {
 	}
 
 	/* normal packet, deliver data to layer5 */
-	if (packet.seqnum == rtp_layer.nextseqnum) {
+	else if (packet.seqnum == rtp_layer.nextseqnum) {
 		tolayer5(B, packet.payload);
 		rtp_layer.nextseqnum = (rtp_layer.nextseqnum + 1) % SEQ_NUM_SIZE;
 		++rtp_layer.cnt_layer5;
 		printLog(B, const_cast<char *>("Send packet to layer5"), &packet, NULL);
 	}
 		/* duplicate packet, resend the latest ACK again */
-	else if (packet.seqnum < rtp_layer.nextseqnum) {
-		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
-	}
-		/* disorder packet, resend the latest ACK again */
 	else {
 		printLog(B, const_cast<char *>("Disordered packet received"), &packet, NULL);
 	}

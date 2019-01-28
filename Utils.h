@@ -13,15 +13,15 @@
 #include <string.h>
 #include <cstdio>
 
-#define DEBUG
+//#define DEBUG
 //#define DEBUG_ABP
 //#define DEBUG_GBN
 
-#define DEBUG_NMSG 100
-#define DEBUG_PROB_LOSS 0.2//0.05
-#define DEBUG_PROB_CORP 0.0//0.45
-#define DEBUG_TIME 2
-#define DEBUG_TRACE 0
+#define DEBUG_NMSG 20
+#define DEBUG_PROB_LOSS 0.20//0.05
+#define DEBUG_PROB_CORP 0.20//0.45
+#define DEBUG_TIME 100
+#define DEBUG_TRACE 2
 
 ///======================= Data Defn ===================
 

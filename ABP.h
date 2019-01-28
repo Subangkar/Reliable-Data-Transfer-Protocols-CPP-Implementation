@@ -58,12 +58,6 @@ pkt make_pkt(msg message, int seqNum, int ackNum = ACK_ABP_DEFAULT);
 
 pkt make_pkt(const char data[MSG_LEN], int seqNum, int ackNum);
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <queue>
-
-#include "Utils.h"
 
 #define A 0
 #define B 1
@@ -170,20 +164,14 @@ void B_input(struct pkt packet) {
 		tolayer5(B, packet.payload);
 		++rtp_layer.cnt_layer5;
 		printLog(B, const_cast<char *>("Sent packet to layer5"), &packet, NULL);
-	}
-
-		/* check checksum, if corrupted*/
-	else if (packet.checksum != calc_checksum(&packet)) {
+	} else if (packet.checksum != calc_checksum(&packet)) {/* if corrupted send NACK */
 		printLog(B, const_cast<char *>("Data Packet is corrupted"), &packet, NULL);
 		acknum = !rtp_layer.seqnum;
 		pkt ack = make_pkt(packet.payload, packet.seqnum, acknum);// send packet seq no as it is received
 		tolayer3(B, ack); // nextseqnum doesn't have any meaning here
 		printLog(B, const_cast<char *>("Send NACK packet to layer3"), &ack, NULL);
 		return;
-	}
-
-		/* duplicate pkt resends the ACK*/
-	else if (packet.seqnum != rtp_layer.seqnum) {
+	} else if (packet.seqnum != rtp_layer.seqnum) {/* duplicate pkt resends the ACK*/
 		printLog(B, const_cast<char *>("Duplicated packet detected"), &packet, NULL);
 	}
 	pkt ack = make_pkt(packet.payload, packet.seqnum, acknum);// send packet seq no as it is received
